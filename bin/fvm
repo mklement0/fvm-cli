@@ -1,0 +1,1311 @@
+#!/usr/bin/env bash
+
+# --- STANDARD SCRIPT-GLOBAL CONSTANTS
+
+kTHIS_NAME=${BASH_SOURCE##*/}
+kTHIS_HOMEPAGE="https://github.com/mklement0/$kTHIS_NAME"
+kTHIS_VERSION='v0.0.0' # NOTE: This assignment is automatically updated by `make version VER=<newVer>` - DO keep the 'v' prefix.
+
+unset CDPATH  # To prevent unexpected `cd` behavior.
+
+# --- SCRIPT-SPECIFIC GLOBALS
+
+# TEST-MODE SUPPORT: Invoke with `net_same2u_fvm_test=1 fvm ...`
+#                    Note that test mode operates with and on mock-up files stored in
+#                    the repo's ./test/.fixtures/mockups folder, which are copied to subfolder /tmp/net.same2u.fvm-test
+#                    by ./test/commands/setup_dir
+g_testMode=0
+[[ $net_same2u_fvm_test == '1' ]] && g_testMode=1
+
+# The full path of the `vmrun` CLI that we're wrapping.
+g_vmrunExe='/Applications/VMware Fusion.app/Contents/Library/vmrun'
+# TEST-MODE SUPPORT: override with the mock version
+(( g_testMode )) && g_vmrunExe='/tmp/net.same2u.fvm-test/vmrun' 
+
+g_inventoryFile="$HOME/Library/Application Support/VMware Fusion/vmInventory"
+# TEST-MODE SUPPORT: override the VM-inventory file to use.
+(( g_testMode )) && g_inventoryFile='/tmp/net.same2u.fvm-test/vmInventory' 
+
+# --- Begin: STANDARD HELPER FUNCTIONS
+
+die() { echo "$kTHIS_NAME: ERROR: ${1:-"ABORTING due to unexpected error."}" 1>&2; exit ${2:-1}; }
+dieSyntax() { echo "$kTHIS_NAME: ARGUMENT ERROR: ${1:-"Invalid argument(s) specified."}"$'\n'"Use -h for help." 1>&2; exit 2; }
+
+# SYNOPSIS
+#   openUrl <url>
+# DESCRIPTION
+#   Opens the specified URL in the system's default browser.
+openUrl() {
+  local url=$1 platform=$(uname) cmd=()
+  case $platform in
+    'Darwin') # OSX
+      cmd=( open "$url" )
+      ;;
+    'CYGWIN_'*) # Cygwin on Windows; must call cmd.exe with its `start` builtin
+      cmd=( cmd.exe /c start '' "$url " )  # !! Note the required trailing space.
+      ;;
+    'MINGW32_'*) # MSYS or Git Bash on Windows; they come with a Unix `start` binary
+      cmd=( start '' "$url" )
+      ;;
+    *) # Otherwise, assume a Freedesktop-compliant OS, which includes many Linux distros, PC-BSD, OpenSolaris, ...
+      cmd=( xdg-open "$url" )
+      ;; 
+  esac
+  "${cmd[@]}" || { echo "Cannot locate or failed to open default browser; please go to '$url' manually." >&2; return 1; }
+}
+
+# Prints the embedded Markdown-formatted man-page source to stdout.
+printManPageSource() {
+  sed -n -e $'/^: <<\'EOF_MAN_PAGE\'/,/^EOF_MAN_PAGE/ { s///; t\np;}' "$BASH_SOURCE"
+}
+
+# Opens the man page, if installed; otherwise, tries to display the embedded Markdown-formatted man-page source; if all else fails: tries to display the man page online.
+openManPage() {
+  local pager embeddedText 
+  if ! man 1 "$kTHIS_NAME" 2>/dev/null; then
+    # 2nd attempt: if present, display the embedded Markdown-formatted man-page source
+    embeddedText=$(printManPageSource)
+    if [[ -n $embeddedText ]]; then
+      pager='more'
+      command -v less &>/dev/null && pager='less' # see if the non-standard `less` is available, because it's preferable to the POSIX utility `more`
+      printf '%s\n' "$embeddedText" | "$pager"
+    else # 3rd attempt: open the the man page on the utility's website
+      openUrl "${kTHIS_HOMEPAGE}/doc/${kTHIS_NAME}.md"
+    fi
+  fi  
+}
+
+# Prints the contents of the synopsis chapter of the embedded Markdown-formatted man-page source for quick reference.
+printUsage() {
+  local embeddedText
+  # Extract usage information from the SYNOPSIS chapter of the embedded Markdown-formatted man-page source.
+  embeddedText=$(sed -n -e $'/^: <<\'EOF_MAN_PAGE\'/,/^EOF_MAN_PAGE/!d; /^## SYNOPSIS$/,/^#/{ s///; t\np; }' "$BASH_SOURCE")
+  if [[ -n $embeddedText ]]; then
+    # Print extracted synopsis chapter - remove backticks for uncluttered display.
+    printf '%s\n\n' "$embeddedText" | tr -d '`'
+  else # No SYNOPIS chapter found; fall back to displaying the man page.
+    echo "WARNING: usage information not found; opening man page instead." >&2
+    openManPage
+  fi
+}
+
+# --- End: STANDARD HELPER FUNCTIONS
+
+# ---  PROCESS STANDARD, OUTPUT-INFO-THEN-EXIT OPTIONS.
+case $1 in
+  --version)
+    # Output version number and exit, if requested.
+    echo "$kTHIS_NAME $kTHIS_VERSION"$'\nFor license information and more, visit '"$kTHIS_HOMEPAGE"; exit 0
+    ;;
+  -h|--help)
+    # Print usage information and exit.
+    printUsage; exit
+    ;;
+  --help-vmrun) # !! NONSTANDARD - invoke help for the utility we're wrapping
+    # Print `vmrun`'s command-line help and exit.
+    # !! `vmrun` doesn't support an explicit option for displaying its help.
+    # !! Instead, it displays its help when no arguments or an invalid option
+    # !! - such as --help - is specified; in either case, it sets its exit code to 255.
+    "$g_vmrunExe" --help; exit 0
+    ;;
+  --man)
+    # Display the manual page and exit, falling back to printing the embedded man-page source.
+    openManPage; exit
+    ;;
+  --man-source) # private option, used by `make update-man`
+    # Print raw, embedded Markdown-formatted man-page source and exit
+    printManPageSource; exit
+    ;;
+  --home)
+    # Open the home page and exit.
+    openUrl "$kTHIS_HOMEPAGE"; exit
+    ;;
+esac
+
+# --- Begin: HELPER FUNCTIONS
+
+# SYNOPSIS
+#   getAppBundlePath [<pid>]
+# macOS ONLY: Returns the path to the .app bundle that launched
+# the process with PID <pid> (defaults to the current process's parent process, $PPID).
+function getAppBundlePath() {
+  local pid=${1:-$PPID}
+  while pid=$(ps -o ppid= $pid 2>/dev/null); do # note: by not double-quting $pid its leading whitespace is ignored
+    ps -o comm= $pid | awk '/\.app\// { sub("\.app/.*", ".app"); print; exit 0 } { exit 1 }' && return
+  done
+}
+
+# SYNOPIS
+#   assertAuthorizedForAssistiveAccess
+# Ensures that the hosting application is authorized for assistive access, 
+# and aborts if not, presenting instructions on how to perform the authorization.
+assertAuthorizedForAssistiveAccess() {
+  # Note:
+  #     osascript -e 'tell application "System Events" to count windows of process "SystemUIServer"'
+  #   is a simple statement that requires assistive access and fails without it.
+  #   Since it is the only statement we execute, we infer from its failure in the abstract
+  #   that lack of authorization is the cause.
+  #   
+  #   Examining the actual AppleScript error message would be non-trivial, because
+  #    - the error message may be localized, though the following substrings are invariant: "System Events" and "osascript" 
+  #    - the error code *varies*: observed in the wild: 
+  #       * -1719, -1728 (these are generic codes documented at https://developer.apple.com/library/content/documentation/AppleScript/Conceptual/AppleScriptLangGuide/reference/ASLR_error_codes.html)
+  #       * -25211 (not documented) 
+  if ! osascript -e 'tell application "System Events" to count windows of process "SystemUIServer"' &>/dev/null; then
+    cat >&2 <<EOF # !! The *beginning of the very 1st line must convey enough information by itself*, in case this utility is run *from Alfred*: the text in an Alfred notification is cut off at around 49 chars.
+$(basename -- "$(getAppBundlePath)") MUST BE AUTHORIZED FOR ASSISTIVE ACCESS before $kTHIS_NAME can run:
+=========
+
+As a one-time action, application 
+
+    $(basename -- "$(getAppBundlePath)")
+    
+must be added to the list of authorized applications at: 
+
+  System Preferences > Security & Privacy > Accessibility
+
+AND its entry in the list must be CHECKED.
+
+Note that you must click the padlock icon in the lower left corner first 
+in order to make changes, which requires providing your (an administrator's)
+password.
+
+EOF
+    # Abort with specific exit code.
+    exit 3
+  fi
+} 
+
+# SYNOPSIS
+#   getFusionFrontWindowNameIfFrontmost
+# If VMware Fusion is running *and frontmost*, outputs its front window's name (title).
+# If Fusion isn't running or not frontmost or has no open windows, nothing is output.
+getFusionFrontWindowNameIfFrontmost() {
+  osascript -- - <<'EOF'
+    tell application id "com.vmware.fusion"
+      if not running or not frontmost then return
+      set appName to name of it
+      tell application "System Events" to tell application process appName
+        try
+            # Try to reference the front window's name and fail quietly, if there's none.
+            set frontWin to window 1
+            set winName to name of frontWin
+            if winName = "" then
+              # !! Sadly, unless a VM is running (neither paused nor suspended), the
+              # !! window name is *empty*. In that event we try to derive the front
+              # !! window's name from the *Window* menu, by the checkmark next to
+              # !! the menu item representing the front window. Note that this only
+              # !! works if Fusion is frontmost, which we've already ensured.
+              tell menu 1 of menu bar item -2 of menu bar 1
+                repeat with itm in menu items
+                  if value of attribute "AXMenuItemMarkChar" of itm ≠ missing value then
+                    set winName to name of itm
+                    exit repeat
+                  end if
+                end repeat
+              end tell
+            end if
+            return winName
+        end try
+      end tell
+    end tell
+EOF
+}
+
+# SYNOPSIS
+#   hideFusion
+# Hides VMware Fusion.
+hideFusion() {
+  osascript -- - <<'EOF'
+    try
+      tell application "System Events" to set visible of application process "VMware Fusion" to false
+    end try
+EOF
+}
+
+# SYNOPSIS
+#   showFusionLibraryWin
+# Activates the VMware Fusion library window - implicitly launches Fusion,
+# first, if necessary.
+showFusionLibraryWin() {
+  osascript -- - ${1:-0} <<'EOF'    
+
+    # !! Dummy statement to provoke an error right away if the calling application
+    # !! isn't authorized for assistive access.
+    tell application "System Events" to count of windows of process "SystemUIServer"
+
+    tell application id "com.vmware.fusion"
+      # Make sure that Fusion is launched and frontmost
+      activate
+      repeat while not frontmost
+        delay 0.1
+        activate
+      end repeat
+      set appName to name of it
+      # Activate the "Virtual Machine Library" window 
+      # Note: Since Window > Virtual Machine Library is a *persistent* entry in the Window menu - irrespective of
+      #       whether the library window is actually open or not, we do NOT need to worry about unhiding Fusion first.
+      tell application "System Events"
+        tell application process appName
+          tell menu 1 of menu bar item -2 of menu bar 1
+            # Find the menu item whose keyboard shortcut is Cmd-Shift-L, i.e. the menu item named "Virtual Machine Library" in English.
+            # AXMenuItemCmdModifiers values: 0 = Cmd only, 1 = Shift-Cmd, 2 = Opt-Cmd, 3 = Shift-Opt-Cmd
+            click (first menu item whose value of attribute "AXMenuItemCmdChar" is "L" and value of attribute "AXMenuItemCmdModifiers" is 1)
+          end tell
+        end tell
+      end tell
+    end tell
+    return # make sure nothing is returned
+EOF
+}
+
+# SYNOPSIS
+#   activateFusionWindow title
+# Activates the specified VMware Fusion window by title.
+# NOTE: In order to also work with VMs in fullscreen mode,
+#       we activate via the Window menu, not by calling perform action "AXRaise" 
+#       Unfortunately, using the Window menu requires that Fusion be made
+#       *visible* (though not necessarily *frontmost*) first, as the menu
+#       is only then populated with the list of open VM windows.
+activateFusionWindow() {
+  local res=$(osascript -- - "$1" <<'EOF'
+    on run(argv)
+      tell application id "com.vmware.fusion"
+        if not running then return false
+        return my activateWin(name of it, (item 1 of argv))
+      end tell
+    end run
+
+    on activateWin(appName, winName)
+      local mnuItem, aps
+      tell application "System Events"
+        tell application process appName
+          set aps to it
+          tell menu 1 of menu bar item -2 of menu bar 1
+            # !! To avoid visual disruption from an unrelated VM window becoming
+            # !! visible first, we try to defer making Fusion frontmost until AFTER
+            # !! clicking the Window menu to activate the target VM.
+            # !! However, we must still *unhide* it first, if necessary, 
+            # !! as the Window menu is otherwise not populated with the open windows.
+            if not visible of aps then
+              # Make Fusion visible - but not yet frontmost - so that the
+              # window menu is populated.
+              # Note: Making Fusion only visible is less visually disruptive than making it frontmost,
+              #       but can still be noticeable and turn out to have been in vain, if the target window wasn't found. 
+              set visible of aps to true
+              # We must wait for `visible` to actually reflect true, as the 
+              # menu won't be populated before then.
+              # !! If `visible` doesn't return true after 5 tries, we'll let the
+              # !! `click menu item` call below throw an error.
+              repeat 5 times
+                delay 0.2
+                if visible of aps then exit repeat
+              end repeat
+            end if
+            try
+              click menu item winName
+            on error
+              return false # no such window exists
+            end try 
+            set frontmost of aps to true # now that the target window is active, make Fusion front most
+          end tell
+        end tell
+      end tell
+      return true
+    end activateWin
+EOF
+)
+  [[ $res == 'true' ]]
+}
+
+# SYNOPSIS 
+#   getVmxPaths
+# Get the full paths of all *.vmx files, representing all VMs known to VMware Fusion.
+getVmxPaths() {
+  [[ -f $g_inventoryFile ]] || die "VM inventory file not found: $inventoryFile"
+  grep -F '.config = "/' "$g_inventoryFile" | awk -F\" 'NF > 1 { print $2 }'
+}
+
+# SYNOPSIS
+#   getOpenVmDisplayNames
+# Gets the display names of all currently open VM windows, one on each line.
+# Note that open here just means *a window representing a VM*, irrespective
+# of its power state.
+# Note that for technical reasons Fusion must be made *visible* (though not
+# *frontmost*), if currently hidden.
+getOpenVmDisplayNames() {
+  
+  # TEST mode: Report a fixed VM name as open in a window.
+  (( g_testMode )) && { echo 'FreeBSD 10.1.2 64-bit'; return 0; }
+
+  osascript -- - <<'EOF'
+    tell application id "com.vmware.fusion"
+      if not running then return
+      set appName to name of it
+      tell application "System Events" to tell application process appName
+        # !! Unfortunately, we must ensure that Fusion is visible in order
+        # !! for the Window menu to be populated with the open VM windows.
+        set visible to true
+        tell menu 1 of menu bar item -2 of menu bar 1
+          set winNames to ""
+          set firstWinNameFound to false
+          repeat with itm in menu items
+            if not firstWinNameFound then
+              if value of attribute "AXMenuItemCmdChar" of itm is "L" and value of attribute "AXMenuItemCmdModifiers" of itm is 1 then
+                set firstWinNameFound to true
+              end if
+            else if missing value ≠ name of itm then
+              if winNames = "" then
+                set winNames to name of itm
+              else
+                set winNames to winNames & linefeed & name of itm
+              end if
+            end if
+          end repeat
+        end tell
+      end tell
+    end tell
+    return winNames
+EOF
+}
+
+
+# SYNOPSIS
+#   getVmInfo [-s]
+# Outputs tab-separated information for all registered VMs; the fields are:
+# Without -s:
+#     displayName guestOS vmxPath
+# With -s (to include state info):
+#     displayName guestOS state vmxPath
+# Note: Using -s more than doubles execution time.
+# "state" values are: 
+#     on      ... VM is open in a window, and is either running or paused
+#     win     ... VM is open in a window, but either suspended or shut down.
+#     <space> ... VM is neither running nor paused
+# The VMs are listed in no particular order. 
+# Used as the "data provider"" for printVmInfo().
+getVmInfo() {
+
+  local includeState=0
+  # !! Note that OPTARG and OPTIND must be reset, as they may still have values from when the enclosing *script* parsed options.
+  local OPTARG= OPTIND=1 opt # quiet=0
+  while getopts ':s' opt; do
+    [[ $opt == '?' ]] && { echo "ARGUMENT ERROR: Unknown option: -$OPTARG" >&2; return 2; }
+    [[ $opt == ':' ]] && { echo "ARGUMENT ERROR: Option -$OPTARG is missing its argument." >&2; return 2; }
+    case "$opt" in
+      s)
+        includeState=1
+        ;;
+      *)
+        echo "DESIGN ERROR: option -$opt not handled." >&2; return 3;
+        ;;
+    esac
+  done
+  shift $((OPTIND - 1)) # Skip the already-processed arguments (options).
+
+  # Get all *.vmx paths
+  local vmxPaths=$(getVmxPaths)
+  [[ -n $vmxPaths ]] || return 1
+
+  # Read the paths into an array.
+  local vmxPathsArr=()
+  IFS=$'\n' read -d '' -ra vmxPathsArr <<<"$vmxPaths"
+
+  # !! The casing of the keys in the *.vmx is inconsistent -> use 
+  # !! case-INsensitive matching.
+  # Get all guest OS identifiers.
+  local guestOSs=$(awk -F'"' 'tolower($1) ~ "^guestos" {print $2}' "${vmxPathsArr[@]}")
+  # Get all display names.
+  local displayNames=$(awk -F'"' 'tolower($1) ~ "^displayname" {print $2}' "${vmxPathsArr[@]}")
+
+  if (( includeState )); then
+
+    # For each VM, determine if it is currently running or paused.
+    # Note: We must use `vmrun list` for that, as Fusion due to lack of AppleScript
+    #       support cannot tell us what state a VM is in.
+    local states=$(awk 'NR==FNR { seen[$0]++; next } { print ($0 in seen ? "on" : " ") }' <("$g_vmrunExe" list) <(printf '%s\n' "$vmxPaths"))
+
+    # Those with state "on" by definition are open in a window (running or paused).
+    # To find out if there also suspended or shut-down VMs, we need to get the
+    # list of all open VM windows via Fusion's Window menu, which, unfortunately, 
+    # takes a while.
+
+    # Get a list of 0/1 flags indicating for each VM whether it has an open window: "01001..."
+    local flagList=$(awk -F'\t' 'FNR==NR {seen[$0]++; next} { printf ($0 in seen) }' <(getOpenVmDisplayNames) <(printf '%s\n' "$displayNames"))
+    # If the list contains at least one "1" (i.e., if there's at least 1 open window)...
+    if [[ $flagList =~ '1' ]]; then
+      # ... mark those VMs that aren't already marked "on" with "win".
+      states=$(awk -v flagList="$flagList" 'BEGIN { split(flagList, flags, "") } flags[NR] { if ($0 == " ") { print "win"; next } } 1' <<<"$states")
+    fi
+
+    # Output a list of tab-separated fields.
+    #  displayName guestOS state vmxPath 
+    paste <(printf '%s\n' "$displayNames") <(printf '%s\n' "$guestOSs") <(printf '%s\n' "$states") <(printf '%s\n' "$vmxPaths")
+  
+  else
+
+    # Output a list of tab-separated fields.
+    #  displayName guestOS state vmxPath 
+    paste <(printf '%s\n' "$displayNames") <(printf '%s\n' "$guestOSs") <(printf '%s\n' "$vmxPaths")
+
+  fi
+
+
+}
+
+
+# SYNOPSIS
+#   printVmInfo [-b] [-s] [displayNameRegex]
+#    -b ... bare output (tab-separated, no header); default is columnated with header
+#    -s ... sort by status first (show running/paused VMs first), then by display name; default is to sort by display name only.
+# Outputs high-level VM information about all registered VMs composed of the following 
+# fields, either tab-separated (-b) or pretty-printed, sorted by display name or, additionally, by running/paused status first (-s).
+#     VM Display Name - Guest OS - State - VMX path
+printVmInfo() {
+
+  local bare=0 withState=0 
+  local filterCmd=( cat ) # do not filter the output by default
+  local sortCmd=( sort -f -t $'\t' -k1,1 )  # sort by display name by default 
+  local displayCmd=( column -s $'\t' -t ) # output columnated by default
+
+  # !! Note that OPTARG and OPTIND must be reset, as they may still have values from when the enclosing *script* parsed options.
+  local OPTARG= OPTIND=1 opt # quiet=0
+  while getopts ':bs' opt; do
+    [[ $opt == '?' ]] && { echo "ARGUMENT ERROR: Unknown option: -$OPTARG" >&2; return 2; }
+    [[ $opt == ':' ]] && { echo "ARGUMENT ERROR: Option -$OPTARG is missing its argument." >&2; return 2; }
+    case "$opt" in
+      b)
+        bare=1
+        ;;
+      s)
+        withState=1
+        ;;
+      *)
+        echo "DESIGN ERROR: option -$opt not handled." >&2; return 3;
+        ;;
+    esac
+  done
+  shift $((OPTIND - 1)) # Skip the already-processed arguments (options).
+
+  # Show running/paused VMs first.
+  if (( withState )); then
+    sortCmd=( sort -f -t $'\t' -k3,3r -k1,1 )
+  fi
+
+  # Pretty-print the result, unless suppressed
+  if (( bare )); then
+    header=''
+    displayCmd=( cat )
+  else
+    if (( withState )); then
+      IFS= read -d '' -r header <<'EOF'
+VM Display Name\tGuest OS\tState\tVMX path
+---------------\t--------\t-----\t--------
+EOF
+    else
+      IFS= read -d '' -r header <<'EOF'
+VM Display Name\tGuest OS\tVMX path
+---------------\t--------\t--------
+EOF
+    fi
+  fi
+  
+  local displayNameRegex=$1
+  if [[ -n $displayNameRegex ]]; then
+    filterCmd=( awk -F'\t' -v n="$displayNameRegex" 'tolower($1) ~ tolower(n)' )
+  fi 
+
+  local withStateOpt=
+  (( withState )) && withStateOpt='-s'
+
+  getVmInfo $withStateOpt | "${filterCmd[@]}" | "${sortCmd[@]}" | { printf "$header"; cat; } | "${displayCmd[@]}"  # sed 's:'$'\t'"$HOME"':'$'\t''~:' | 
+
+}
+
+# SYNOPSIS
+#   getVmInfoByUniqueDisplayNameRegex displayNameRegex
+# Outputs information about the VM that is *unambiguously* identified by the 
+# specified regex matching its display name.
+# An error is reported if either no match or multiple matches are found.
+# 2 lines are output in case of unique match:
+#   displayName
+#   vmxFilePath
+# NOTE: This function is optimized for performance, and therefore does NOT use getVmInfo(),
+#       and, unlike the latter, does NOT include a guestOS identifier in the output. 
+getVmInfoByUniqueDisplayNameRegex() {
+  
+  local displayNameRegex=$1 configFileContent vmKey vmxFilePath
+
+  # Cache the entire config file in memory, for performance reasons 
+  IFS= read -d '' configFileContent < "$g_inventoryFile"
+
+  # Find the (hopefully one and only) display-name line that matches the specified regex.
+  displayNameLine=$(awk -F\" -v n="$displayNameRegex" '/\.DisplayName = / && tolower($2) ~ tolower(n)' <<<"$configFileContent")
+
+  # Arbort if no match was found.
+  [[ -z $displayNameLine ]] && { echo "ERROR: No VM matching display-name regex '$displayNameRegex' found." >&2; return 1; }
+  # Abort, if more than 1 match was found.
+  [[ $displayNameLine =~ $'\n' ]] && { echo "ERROR: Ambiguous display-name regex specified: '$displayNameRegex' matches more than 1 VM:" >&2; echo "$(cut -d\" -f2 <<<"$displayNameLine")" >&2; return 1; }
+
+  # Extract the first part of the key - e.g., 'vmlist6' from 'vmlist6.DisplayName' 
+  vmKey=${displayNameLine%%.*}
+
+  # Use ${vmKey}.config to locate the VMX file path corresponding to the display name found.
+  vmxFilePath=$(awk -F\" "/$vmKey"'\.config =/ { print $2 }' <<<"$configFileContent")
+
+  # Output the display name and the VMX file path, each on their own line.
+  printf '%s\n%s\n' "$(cut -d\" -f2 <<<"$displayNameLine")" "$vmxFilePath"
+}
+
+# SYNOPSIS
+#   closeFusionWin <windowName>
+# Closes the VM with the specified window name (title), i.e., display name.
+# A no-op if Fusion isn't running or no such VM is open.
+closeFusionWin() {
+  local res=$(osascript -- - "$1" <<'EOF'
+    on run(argv)
+      return my closeFusionWin(item 1 of argv)
+    end run
+
+    on closeFusionWin(winName)
+      local activeAppPath, winMnuItm, aps
+      set appObj to application id "com.vmware.fusion"
+      if not appObj is running then return
+      tell application "System Events"
+        tell application process (name of appObj)
+          # !! The window menu is only populated if Fusion is *visible*.
+          # !! It doesn't have to be made *frontmost*, though), which
+          # !! we defer until we have found an actual window by the specified name.
+          set visible to true
+          set aps to it
+          try
+            set winMnuItm to menu item winName of menu 1 of menu bar item -2 of menu bar 1
+          on error
+            return false # window of the specified name not found in the Window menu
+          end try
+          # We must activate Fusion first, *synchronously*, so that clicking
+          # on a menu item works.
+          set frontmost to true 
+          repeat 10 times
+            delay 0.2
+            if frontmost then exit repeat
+          end repeat
+          if not frontmost then error "Failed to activate VMware Fusion within timeout period."
+          # Note that we must activate the window via the Window menu, because
+          # Perform action "AXRaise" wouldn't work with fullscreen VMs.
+          click winMnuItm
+          # Close the now active window via the File manu.
+          tell menu 1 of menu bar item 3 of menu bar 1
+            # Find the menu item whose keyboard shortcut is Cmd-W, i.e. the menu item named "Close" in English.
+            click (first menu item whose value of attribute "AXMenuItemCmdChar" is "W" and value of attribute "AXMenuItemCmdModifiers" is 0)
+          end tell
+          # Wait for the window to close.
+          # !! We assume that when closing has finished, the Window menu item for that VM
+          # !! will go away, so we wait for that occurrence. 
+          repeat 50 times
+            delay 0.3
+            try
+              name of winMnuItm
+            on error
+              return true
+            end try 
+          end repeat
+          error "VM window '" & winName & "' failed to close within the timeout period."
+        end tell
+      end tell
+      return false
+    end closeFusionWin
+EOF
+)
+  [[ -z $res ]] && return 1 # An unexpected error occurred.
+  [[ $res == 'true' ]] || echo "(Nothing to do, because VM '$1' has no open window.)" >&2
+}
+
+# SYNOPSIS
+#   getVmxFileProperty vmxFilePath propertyName
+# Outputs the value of the specified property from the specified VMX file. 
+getVmxFileProperty() {
+  local vmxFile=$1 propertyName=$2
+  # Note: all property values are "..."-enclosed.
+  awk -F\" -v pname="$propertyName" 'tolower($1) ~ tolower("^" pname) { print $2 }' "$vmxFile"
+}
+
+# SYNOPSIS
+#   quoteRe <text>
+# DESCRIPTION
+#   For *Sed*:
+#   Quotes (escapes) the specified literal text for use in a regular expression
+#   whether basic or extended - should work with all common flavors.
+#   However, this function is NOT utility-agnostic - Perl has additional escaping requirements, for instance - cf. quotePerlRe()
+#   Mutli-line strings are supported (actual newlines are converted to '\n'), but note that 
+#   while `sed` does support `\n` to represent newlines in the regex, it'll only be able to match them
+#   if you first read *multiple* lines into the pattern space.
+#   To quote a *substitution string* in s/// calls, use quoteSubst().
+# EXAMPLE
+#   quoteRe $'Cost\(*):\n$3.'  # -> '[C][o][s][t][\][(][*][)][:]\n[$][3][.]'
+quoteRe() { sed -e 's/[^^]/[&]/g; s/\^/\\^/g; $!a\'$'\n''\\n' <<<"$1" | tr -d '\n'; }
+
+# SYNOPSIS
+#   isFusionLibWinFrontmost
+# Indicates by way of exit code if Fusion is frontmost AND its library window is the front window.
+isFusionLibWinFrontmost() {
+  local res=$(osascript -- - <<'EOF'
+    tell application id "com.vmware.fusion"
+      if it is not running then return false
+      if it is not frontmost then return false
+      set appName to name of it
+    end tell
+    tell application "System Events" to tell application process appName to tell menu 1 of menu bar item -2 of menu bar 1
+  		return missing value ≠ value of attribute "AXMenuItemMarkChar" of (first menu item whose value of attribute "AXMenuItemCmdChar" is "L" and value of attribute "AXMenuItemCmdModifiers" is 1)
+    end tell
+EOF
+)
+  [[ $res == 'true' ]]
+}
+
+
+# SYNOPSIS
+#   activateNextFusionWindow
+# Activates the 2nd visible Fusion window, if there is one.
+# If there is none, or Fusion isn't running, no action is taken. 
+# The exit code indicates if a window was actually activated.
+# Note that fullscreen VMs are NOT considered, because they do not even
+# appear in the collection of windows reported for the app process in the "System Events" context. 
+activateNextFusionWindow() {
+  local res=$(osascript -- - <<'EOF'
+    tell application id "com.vmware.fusion"
+      if it is not running then return false
+      set appName to name of it
+    end tell
+    tell application "System Events" to tell application process appName
+      try
+        perform action "AXRaise" of window 2
+        return true
+      end try
+    end tell
+    return false
+EOF
+)
+  [[ $res == 'true' ]]
+}
+
+# SYNOPSIS
+#   savePrevFrontmostAppId
+# Saves the bundle ID of the currently frontmost application to a temporary file. 
+savePrevFrontmostAppId() {
+  osascript -e 'id of application (path to frontmost application as text)' > /tmp/net.same2u.fvm-state
+}
+
+# SYNOPSIS
+#   getPrevFrontmostAppId
+# Gets the bundle ID of the previously frontmost application, as saved with savePrevFrontmostAppId().
+# Fails quietly, if savePrevFrontmostAppId() wasn't previously called or the file cannot be found
+# or accessed for any other reason (although the exit code will reflect whether the file coud be read). 
+getPrevFrontmostAppId() {
+  cat /tmp/net.same2u.fvm-state 2>/dev/null
+}
+
+# --- END: HELPER FUNCTIONS
+
+# --- MAIN BODY
+
+[[ -f $g_vmrunExe ]] || die "Cannot locate VMware Fusion's CLI, which this utility requires: $g_vmrunExe"
+
+[[ -f $g_inventoryFile ]] || die "VM inventory file not found: $g_inventoryFile"
+
+# Next, we ensure that the hosting application is authorized for assistive access,
+# as there's no point in using this utility without it.
+# Note that this is somehwat slow, but ensuring this up front, from a centralized
+# location is by far the simplest and most robust approach.
+assertAuthorizedForAssistiveAccess
+
+# --- BEGIN:  Options and arguments (pre-)parsing
+# Initialize variables and option defaults.
+operands=()
+passThruToVmRun=0
+havePassThruOpts=0
+haveOwnSubCommandOpts=0
+passThruArgs=( "$@" )
+subCmd= displayNameRegex= vmxFilePath=
+toggleActivation=0 exact=0 bare=0 showState=0 deactivate=0
+ignore=0 allOptsParsed=0 noMoreOperandsAllowed=0 vmxFilePathGiven=0 vmxFilePathArgNdx=-1 passThruArgNdxToRemove=-1
+
+# -------
+# NOTE:
+#  Argument parsing is complicated by the following factors:
+#   - this utility's own options and operands must be distinguished from the ones passed through to vmrun
+#   - to do so in a manner that provides helpful error messages in case of syntax errors, vmrun's options and subcommand names must be hard-coded into this utility.
+#   - vmrun's option-passing style differs from this utility's (vmrun supports NEXT-style options: long option names preceded by a single "-", has strict positional requirements, requires that option-arguments be separate arguments)
+# -------
+i=-1
+for arg; do
+  (( ++i )) # Note: index is *0*-based
+  (( ignore )) && { ignore=0; continue; }
+  # An OPTION; 
+  #  allOptsParsed -eq 1 means: options are no longer allowed, treat all remaining args as operands
+  #  similarly, passThruToVmRun -eq 1 means that a `vmrun` subcommand has already been detected, and further arguments needn't be looked at (will just be passed through)
+  if [[ $allOptsParsed -eq 0 && passThruToVmRun -eq 0 && $arg =~ ^-[[:alnum:]] ]]; then 
+    # Note: For the most part, we expect EITHER or our own options OR vmrun's.
+    #       The sole exception is -x, which also applies to a pass-thru 
+    #       command, to modify our own preprocessing of the passthru command
+    #       (translating the display name specified into an VMX file path).
+    if [[ $arg = '--' ]]; then # explicit end-of-options marker
+      allOptsParsed=1
+    # A *standalone* -x option is the only one that may be combined with a
+    # vmrun pass-thru command.
+    # Note that -x may also be specified as part of an options *group*, handled below. 
+    elif [[ $arg == '-x' ]]; then
+      exact=1
+      passThruArgNdxToRemove=$i  # remember the index, because we must remove the opion from the pass-thru arguments array below.
+    # Lool for vmrun's pre-subcommand authorization options (note that -T -p -u -h do not apply in Fusion, though in the case of -T the help doesn't say so).
+    # Note: We must detect these explicitly, because they take option-arguments, which we must skip when further parsing the arguments.
+    #       (We must keep parsing, because we must our display-name regex argument that we must translate into a VMX file path first, if applicable.) 
+    # Also note that vmrun requires that the option-argument be a *separate* argument.
+    elif [[ $arg =~ ^-(gu|gp|vp|T)$ ]]; then  # Note: -T <hostType> shouldn't apply to Fusion, but since the help doesn't say so, we allow it too.
+      havePassThruOpts=1
+      ignore=1 # ignore next argument, bcause it is this option's option-argument
+    else # a standalone short option, an group of short options, one of our own long options, or a pass-thru post-vmx-file vmrun option
+      # Parse into prefix and mere option name / group of option chars.
+      [[ $arg =~ ^(--?)(.+) ]]; prefix="${BASH_REMATCH[1]}"; optNameOrGroup="${BASH_REMATCH[2]}"
+      if [[ $prefix == '--' ]]; then # single long option; e.g., --exact-name
+        optNames=( "$optNameOrGroup")
+      else
+        # Either a group of options (e.g., -xt), or (less likely), a pass-thru option NeXT-style argument (e.g., -wait) for vmrun
+        # We try to parse it as an options group: split the chars. into a char. array:
+        read -ra optNames <<<"$(awk 'BEGIN {FS=""} { for(i=1;i<=NF;++i) printf "%s ", $i }' <<<"$optNameOrGroup")"
+      fi      
+
+      for optName in "${optNames[@]}"; do
+        case $optName in
+          x|exact-name)
+            exact=1
+            # Note: We do NOT set haveOwnSubCommandOpts for -x, because it is
+            #       the one and only option that *may* be used with a vmrun
+            #       pass-thru command: it merely qualifies the translation of the
+            #       display-name [regex] argument to a *.vmx file path, and is
+            #       explicitly removed before vmrun is invoked. 
+            ;;
+          t|toggle-activation)
+            toggleActivation=1
+            haveOwnSubCommandOpts=1
+            ;;
+          b|bare-output)
+            bare=1
+            haveOwnSubCommandOpts=1
+            ;;
+          s|show-state)
+            showState=1
+            haveOwnSubCommandOpts=1
+            ;;          
+          *) # Any other option is presumed to either be a vmrun option or a syntax error (unknown option for one our own subcommands) - will be handled later
+            havePassThruOpts=1
+            ;;
+        esac
+      done
+    fi
+  elif (( noMoreOperandsAllowed )); then
+    dieSyntax "Unexpected operand passed to subcommand '$subCmd': $arg"
+  else # an OPERAND
+    if [[ -z $subCmd ]]; then # 1st operand: the subcommand
+      # Translate the subcommand to all-lowercase.
+      # Note that that's OK even if the subcommand turns out to be a display-name regex
+      # for use with the implied 'activate' subcommand, because we also match
+      # display names case-insensitively.
+      subCmd=$(tr '[:upper:]' '[:lower:]' <<<"$arg")
+      case $subCmd in
+        # *vmrun* SUBCOMMANDS as of v1.15.6
+        # !! THIS LIST MUST BE COMPLETE, AS ANY vmrun COMMANDS NOT LISTED HERE
+        # !! CAN OTHERWISE NOT BE INVOKED.
+        # !! THIS APPROACH IS SUBOPTIMAL, because later vmrun versions could
+        # !! add additional subcommands, which we'd have to stay in sync with.
+        # !! That said, vmrun is not likely to see extensions in functionality at this point. 
+        list|start|stop|reset|suspend|pause|unpause|listsnapshots|snapshot|deletesnapshot|reverttosnapshot|runprograminguest|fileexistsinguest|directoryexistsinguest|setsharedfolderstate|addsharedfolder|removesharedfolder|enablesharedfolders|disablesharedfolders|listprocessesinguest|killprocessinguest|runscriptinguest|deletefileinguest|createdirectoryinguest|deletedirectoryinguest|createtempfileinguest|listdirectoryinguest|copyfilefromhosttoguest|copyfilefromguesttohost|renamefileinguest|capturescreen|writevariable|readvariable|getguestipaddress|upgradevm|installtools|checktoolsstate|deletevm|clone) 
+          passThruToVmRun=1  # we'll pass the (preprocessed) command line through to vmrun
+          ;;
+        # *Our* SUBCOMMANDS:
+        # !! These must match the ones in the follow-up validation and command-dispatching case ... esac blocks below
+        # No-operand-supported subcommands:
+        library|quit) 
+          noMoreOperandsAllowed=1
+          ;;
+        # All of our operands-required-or-supported subcommands:
+        ls|activate|reveal|edit|close)
+          : # proceed to the next argument
+          ;;
+        *) # Assumed to be a display-name regex / VMX path for use with the *implied* 'activate' subcommand.
+          [[ $arg =~ \.[vV][mM][xX]$ ]] && vmxFilePath=$arg || displayNameRegex=$arg
+          [[ -n $vmxFilePath ]] && vmxFilePathGiven=1 # set a flag to indicate that a VMX file path (rather than a display-name regex) was given.
+          subCmd='activate'
+          noMoreOperandsAllowed=1
+          ;;
+      esac
+    elif [[ -z $displayNameRegex && -z $vmxFilePath ]]; then # 2nd operand: the display-name regex or VMX file path
+      # Save vmx file path / display-name regex, as appropriate.
+      [[ $arg =~ \.[vV][mM][xX]$ ]] && vmxFilePath=$arg || displayNameRegex=$arg
+      [[ -n $vmxFilePath ]] && vmxFilePathGiven=1 # set a flag to indicate that a VMX file path (rather than a display-name regex) was given.
+      vmxFilePathArgNdx=$i # remember the position of the VMX file path argument, so we can subsitute the display-name-derived path later.
+      (( ! passThruToVmRun )) && noMoreOperandsAllowed=1 # None of our own commands support more than 1 operand.
+    fi
+  fi
+done
+# --- END:  Options and arguments (pre-)parsing
+
+# Check for incompatible options:
+#   - an own command unexpectedly combined with vmrun options
+#   - a vmrun command unexpectedly combined with own options other than -x 
+# pv passThruToVmRun havePassThruOpts haveOwnSubCommandOpts
+errMsg='Inapplicable options specified.'
+(( havePassThruOpts && ! $passThruToVmRun )) && dieSyntax "$errMsg"
+(( haveOwnSubCommandOpts && $passThruToVmRun )) && dieSyntax "$errMsg"
+
+# Next, if a display-name regex was given, and the given subcommand requires
+# that it unambiguously identify a *single* VM (all but one subcommand), we ensure that, 
+# and we also determine the VMX file path of the matched VM.
+ # (The only exception is subcommand `ls`, where the display-name regex merely acts as a *filter*.)
+if [[ -n $displayNameRegex ]]; then
+
+    # If an exact, literal display name was passed, we must translate it
+    # to its regex equivalent (anchoring between ^...$, escaping metachars.)
+    (( exact )) && displayNameRegex="^$(quoteRe "$displayNameRegex")\$"    
+
+    if [[ $subCmd != 'ls' ]]; then
+      # We must unambiguously identify the 
+      # targeted VM and determine its display name and VMX file path.
+      vmInfo=$(getVmInfoByUniqueDisplayNameRegex "$displayNameRegex")
+      [[ -n $vmInfo ]] || exit # no single, unambiguous match found
+
+      # Parse the info into the actual, literal display name and VMX file path.
+      IFS=$'\n' read -d '' -r displayName vmxFilePath <<<"$vmInfo"
+
+      # If *toggling* activation is requested, see if *de*activation is needed, 
+      # which is the case if Fusion is currently frontmost with the target VM in the front window.    
+      if (( toggleActivation )) && [[ $(getFusionFrontWindowNameIfFrontmost) == "$displayName" ]]; then
+        deactivate=1
+      fi
+    fi
+
+elif [[ -n $vmxFilePath ]]; then # a VMX file path was given.
+
+  # Obtain the display name from the given VMX file.
+  displayName=$(getVmxFileProperty "$vmxFilePath" 'displayName')
+
+  # We don't officially support passing a VMX file path to our `ls` subcommand for filtering,
+  # but as we courtesy we translate the exact display name into the equivalent
+  # regex so we can pass it as a filter to `ls`.
+  if [[ $subCmd == 'ls' ]]; then
+    displayNameRegex="^$(quoteRe "$displayName")\$"
+  fi
+
+fi
+
+# DO IT.
+# !! THE SET OF SUBCOMMANDS IN THIS BLOCK AND THE SUBCOMMANDS' LOGIC MUST
+# !! BE KEPT IN SYNC WITH THE ARGUMENT-PARSING BLOCK ABOVE.
+ec=0
+# --- Pass invocation through to `vmrun`:
+if (( passThruToVmRun )); then 
+
+  # pv vmxFilePathGiven vmxFilePath vmxFilePathArgNdx #??
+
+  # If a display-name regex was translated into a VMX file path,
+  # replace the regex with the file path in the pass-thru arguments array now. 
+  if [[ $vmxFilePathGiven -eq 0 && -n $vmxFilePath ]]; then    
+    passThruArgs[vmxFilePathArgNdx]=$vmxFilePath
+  fi
+
+  # Remove our -x option from the pass-thru arguments, if it was specified.
+  if (( passThruArgNdxToRemove >= 0 )); then
+    passThruArgsFinal=() i=-1
+    for arg in "${passThruArgs[@]}"; do
+      (( ++i != passThruArgNdxToRemove )) && passThruArgsFinal+=( "$arg" )
+    done
+  else
+    passThruArgsFinal=( "${passThruArgs[@]}" )
+  fi
+
+  # Finally, invoke `vmrun`.
+  "$g_vmrunExe" "${passThruArgsFinal[@]}"
+  ec=$? # Pass vmrun's exit code through.
+
+# --- One of our own subcommands:
+else
+
+  # We default to the 'library' subcommand.
+  [[ -n $subCmd ]] || subCmd='library'
+
+  # Make sure that no *inapplicable* options were passed:
+  errMsg='Inapplicable options specified.'
+  if (( toggleActivation )) && [[ ! $subCmd =~ ^(activate|library)$ ]]; then
+    dieSyntax "$errMsg"
+  elif (( exact )) && { [[ -z $displayNameRegex || $vmxFilePathGiven -eq 1 || ! $subCmd =~ ^(ls|activate|edit|reveal|close)$ ]]; }; then
+    dieSyntax "$errMsg" 
+  elif (( bare || showState )) && [[ ! $subCmd =~ ^(ls)$ ]]; then
+    dieSyntax "$errMsg" 
+  fi
+
+  # Make sure that all subcommands that require a display name / VMX file path do have one.
+  if [[ $subCmd =~ ^(activate|reveal|edit|close)$ ]]; then
+    [[ -n $displayName ]] || dieSyntax "You must pass a display-name regex or VMX file path."
+  fi
+
+  # Perform specific subcommand.
+  case $subCmd in
+    activate)
+      if (( deactivate )); then
+        # See which application was previously frontmost to decide what window
+        # / application to restore as frontmost.
+        # Note: This only works as expected if the user toggled the application on
+        #       and then - without changing to another application in between -
+        #       off again.  
+        prevFrontmostAppId=$(getPrevFrontmostAppId)
+        if [[ $prevFrontmostAppId == 'com.vmware.fusion' ]]; then # Another VM was previously frontmost.
+          # We can't selectively hide the front window and minimizing it would yield unexpected behavior, 
+          # so we must explicitly activate the 2nd window; if there is none, we hide Fusion as a whole.
+          activateNextFusionWindow || hideFusion 
+        else # No state information or an app OTHER than Fusion was active: simply hide Fusion as a whole
+          hideFusion
+        fi
+      else
+        (( $toggleActivation )) && savePrevFrontmostAppId
+        # Blindly try to activate a Fusion window by that name
+        # and exit, if that succeeds, meaning that the window exists and was activated.
+        activateFusionWindow "$displayName" 2>/dev/null && exit
+        # Otherwise: start the VM with vmrun, which implicitly activates the window too.
+        "$g_vmrunExe" start "$vmxFilePath"
+        ec=$? # We pass whatever exit code vmrun reported through.
+      fi      
+      ;;
+    ls)
+      opts=()
+      (( bare )) && opts+=( -b )
+      (( showState )) && opts+=( -s )
+      printVmInfo "${opts[@]}" "$displayNameRegex"
+      ;;
+    library)
+      # !! If, on deactivation, the new active window is a *stopped* VM, switching
+      # !! that window's active status is NOT reflected in the Window menu: the 
+      # !! library window remains inexplicably remains checked.
+      # !! Thus, with a stopped VM window active, the toggle doesn't work correctly *when repeated in immediate succession*:
+      # !! After deactivating the library window again and returning to the stopped VM, the change in active window
+      # !! is not registered and immediately toggling the library window on will be a quiet no-op. 
+      # !! Workaround: Simply invoke the toggle again in order to make the library window visible again. 
+      if (( $toggleActivation )) && isFusionLibWinFrontmost; then # deactivate (hide)
+        prevFrontmostAppId=$(getPrevFrontmostAppId)
+        if [[ $prevFrontmostAppId == 'com.vmware.fusion' ]]; then # Another VM was previously frontmost.
+          activateNextFusionWindow || hideFusion
+        else
+          hideFusion
+        fi 
+      else
+        (( $toggleActivation )) && savePrevFrontmostAppId
+        showFusionLibraryWin
+      fi
+      ec=$?
+      ;;
+    reveal) # Reveal *.vmx file in Finder.
+      open -R -- "$vmxFilePath"
+      ec=$?
+      ;;
+    edit) # Open *.vmx file in default text editor.
+      if (( g_testMode )); then
+        # Note: In test mode we can't really know what editor will be used to 
+        #       open the file, so as a poor substitute we simply echo the full
+        #       VMX file path and test for that.
+        printf '%s\n' "$vmxFilePath" 
+      else
+        open -t -- "$vmxFilePath"
+      fi
+      ec=$?
+      ;;
+    close)
+      closeFusionWin "$displayName"
+      ec=$?
+      ;;
+    quit)
+      # Quit Fusion.
+      # Note: This is asynchronous, because we can't be sure that qutting
+      #       will actually happen - the user may cancel.
+      echo "Quitting VMWare Fusion..."
+      osascript - <<'EOF'
+       tell application id "com.vmware.fusion"
+        if running then
+          activate # we activate Fusion to make sure that if a prompt is shown, it is visible to the user.
+          quit
+        else
+          return "(VMWare Fusion is not running.)"
+        end if
+      end tell
+EOF
+      ec=$?
+      ;;
+    *) # We should never get here.
+      die "DESIGN-TIME ERROR: Unanticipated subcommand: $subCmd"
+      ;;
+  esac
+
+fi
+
+exit $ec
+
+
+####
+# MAN PAGE MARKDOWN SOURCE
+#  - Place a Markdown-formatted version of the man page for this script
+#    inside the here-document below.
+#    The document must be formatted to look good in all 3 viewing scenarios:
+#     - as a man page, after conversion to ROFF with marked-man
+#     - as plain text (raw Markdown source)
+#     - as HTML (rendered Markdown)
+#  Markdown formatting tips:
+#   - GENERAL
+#     To support plain-text rendering in the terminal, limit all lines to 80 chars.,
+#     and, for similar rendering as HTML, *end every line with 2 trailing spaces*.
+#   - HEADINGS
+#     - For better plain-text rendering, leave an empty line after a heading
+#       marked-man will remove it from the ROFF version.
+#     - The first heading must be a level-1 heading containing the utility
+#       name and very brief description; append the manual-section number 
+#       directly to the CLI name; e.g.:
+#         # foo(1) - does bar
+#     - The 2nd, level-2 heading must be '## SYNOPSIS' and the chapter's body
+#       must render reasonably as plain text, because it is printed to stdout
+#       when  `-h`, `--help` is specified:
+#         Use 4-space indentation without markup for both the syntax line and the
+#         block of brief option descriptions; represent option-arguments and operands
+#         in angle brackets; e.g., '<foo>'
+#     - All other headings should be level-2 headings in ALL-CAPS.
+#   - TEXT
+#      - Use NO indentation for regular chapter text; if you do, it will 
+#        be indented further than list items.
+#      - Use 4-space indentation, as usual, for code blocks.
+#      - Markup character-styling markup translates to ROFF rendering as follows:
+#         `...` and **...** render as bolded (red) text
+#         _..._ and *...* render as word-individually underlined text
+#   - LISTS
+#      - Indent list items by 2 spaces for better plain-text viewing, but note
+#        that the ROFF generated by marked-man still renders them unindented.
+#      - End every list item (bullet point) itself with 2 trailing spaces too so
+#        that it renders on its own line.
+#      - Avoid associating more than 1 paragraph with a list item, if possible,
+#        because it requires the following trick, which hampers plain-text readability:
+#        Use '&nbsp;<space><space>' in lieu of an empty line.
+####
+: <<'EOF_MAN_PAGE'
+# fvm(1) - manage VMware Fusion VMs
+
+## SYNOPSIS
+
+    fvm      [-t]          [library]
+    fvm [-x] [-t]          [activate]   <displayNameRegexOrVmxFile>
+    fvm [-x]               close        <displayNameRegexOrVmxFile>
+    fvm [-x]               reveal       <displayNameRegexOrVmxFile>
+    fvm [-x]               edit         <displayNameRegexOrVmxFile>
+    fvm [-x] [-b] [-s]     ls           [<displayNameRegexFilter>]
+    fvm                    quit
+    fvm [-x] start|pause|unpause|suspend|reset <displayNameRegexOrVmxFile>
+    fvm [-x] stop                       <displayNameRegexOrVmxFile> [soft|hard]
+      CAVEAT: Append 'soft' to prevent potential VM corruption. 
+    fvm [-x] [<auth-opts>] <vmrun-cmd> [...]
+    fvm --help-vmrun
+
+    -t ... toggle activation (hotkey-based invocations)
+    -x ... display name is specified literally, in full
+    -b ... bare, tab-separated output for machine parsing
+    -s ... include VM state and show open VMs first
+    --help-vmrun ... shows vmrun's command-line help
+
+Standard options: `--help`, `--man`, `--version`, `--home`
+
+## DESCRIPTION
+
+`fvm` (*F*usion *V*M *M*anager) is a covenience wrapper around the `vmrun`  
+CLI (https://www.vmware.com/support/developer/vix-api/vix112_vmrun_command.pdf)  
+that comes with VMWare Fusion.
+
+Its major areas of functionality are:
+
+* VMs can be targeted by display name substrings (regular expressions)  
+  instead of having to specify their VMX file path.
+
+* VMs in open windows can be activated or closed, their VMX files can be  
+  revealed in Finder or opened for editing, and Fusion can be quit as a whole.
+
+* A list of all registered VMs can be obtained with subcommand `ls`.
+
+Commands that have a mandatory `<displayNameRegexOrVmxFile>` operand allow  
+targeting a specific VM in the following ways:
+
+* By case-insensitive POSIX-compliant extended regular expression that  
+  unambiguously matches a VM's display name.  
+  Note that this excludes use of word-boundary assertions such as `\b`.  
+  It is sufficient for the expression to match only part of the VM's  
+  display name, as long as that part is unique among all registered VMs.  
+  If multiple VMs match, an error is reported, and all matching display names  
+  are printed.  
+  By contrast, the optional `<displayNameRegexFilter>` operand to the `ls`  
+  merely acts a convenient filter and needn't match unambiguously. 
+
+* If `-x` is specified, the operand must be a VM's full, literal display name.
+
+* Alternatively, the path to a VM's *.vmx file may be specified, as is  
+  required when using `vmrun` directly.
+
+## COMMANDS
+
+  * `library`  
+  activates VMWare Fusion's Library window. If Fusion isn't running, it is  
+  started first. This is the default command.
+
+  * `activate`  
+  activates the specified VM in its existing window. If it doesn't have a  
+  window, the VM is started, which opens it in a window and starts or resumes  
+  it.
+
+  * `close`  
+  closes the specified VM's window. The window is first activated, and what  
+  happens if the VM is running or paused depends on your Fusion preferences.  
+  For instance, the VM may auto-suspend before the window is closed.  
+  If the VM has no open window, a message to that effect is prined to stderr,  
+  and no action is taken (and the exit code is still zero).
+
+  * `reveal`  
+  reveals the specified VM's *.vmx file inside its *.vmwarevm bundle folder   
+  in Finder.
+
+  * `edit`  
+  opens the specified VM's *.vmx file in the system's default text editor.
+
+  * `ls`  
+  lists all registered VMs sorted case-insensitively by display name by  
+  default. If you add `-s`, VMs with open windows are shown first.  
+  The default display is columnated, with a header, for human consumption.  
+  To get header-less, tab-separated data for programmatic consumption instead,  
+  use `-b`.  
+  The fields output for each VM are:  
+  Without -s: display name, guest OS identifier, VMX file path.  
+  With -s:    display name, guest OS identifier, state, VMX file path. 
+  The state field contains:  
+    "on", if a VM is open in a window and running or paused  
+    "win", if it is open in a window and suspended or shut down  
+    a single space otherwise (not open in a window).  
+  You may optionally specify a display-name regex to filter the list by.
+
+  * `start`, `pause`, `unpause`, `suspend`, `reset`  
+  perform the requested power command via `vmrun`. Note that these commands  
+  are no-ops if the target VM is already in the requested state.
+
+  * `stop`  
+  stops the specified VM.  
+  CAVEAT: The default mode is *hard*, which is the equivalent of pulling the  
+  power cord, which *may corrupt the VM*.  
+  To be safe, append argument `soft`, which gives the guest OS the chance  
+  to shut down properly.
+
+  * `<vmrun-cmd>`  
+  represents all other commands that `vmrun` CLI supports, which cover a wide   
+  array of functionality, including managing snapshots,  
+  installing VMware Tools, and running commands inside a VM.  
+  See examples below; for the complete list of supported commands, invoke this  
+  utility with `--help-vmrun`.  
+  
+  * `quit`  
+  quits VMware Fusion synchronously, activating it first, so that prompts, if  
+  any, are visible. Depending on how many VMs are running, quitting can  
+  take a while.
+
+## OPTIONS
+
+  * `-x`, `--exact-name`
+    specifies that the `<displayNameRegexOrVmxFile>` operand contain a literal,
+    full display name that must match the display name of the targeted VM  
+    exactly.
+
+  * `-t`, `--toggle-activation`  
+    can be combined with `library` and `activate` to achieve an activation  
+    toggle: if the specified VM or the library window is not currently   
+    frontmost, it is activated (made frontmost); if it already is frontmost,  
+    it is hidden.  
+    Note that this option only makes sense if you launch `fvm` invisibly,  
+    such as by keyboard shortcut via Alfred (https://www.alfredapp.com/).
+
+  * `-b`, `--bare-output`  
+    switches the `ls` command's output from the default, columated
+    format to a header-less, tab-separated format, as described above.
+
+  * `-s`, `--show-state`  
+    makes the `ls` command include power state information for each VM,  
+    with VMs that are open in a window listed first.  
+    Within each group, the VMs are sorted case-sensitively by display name.  
+    A "state" column is added to the output, whose values are described above.  
+    Note that this option significantly increases execution time.  
+    To see only running or paused VMs, you may use `fvm list` to pass  
+    the `list` command through to `vmrun`, but note that they will be listed  
+    by VMX file path only.
+
+  * `<auth-opts>`  
+    The authorization options to pass through to `vmrun`, for in-guest  
+    operations, namely: `-gu <username>`, `-gp <password>` to specify guest  
+    credentials, and, in case of an encrypted virtual machine, additionally  
+    `-vp <vm-password>`.  
+    Note, however, that you may omit these options, in which case you'll be  
+    prompted interactively.
+
+## STANDARD OPTIONS
+
+All standard options must be provided as the only argument; all of them provide  
+information only.
+
+ * `-h, --help`  
+   Prints the contents of the synopsis chapter to stdout for quick reference.
+
+ * `--man`  
+   Displays this manual page, which is a helpful alternative to using `man`,  
+   if the manual page isn't installed.
+
+ * `--version`  
+   Prints version information.
+  
+ * `--home`  
+   Opens this utility's home page in the system's default web browser.
+
+## LICENSE
+
+Copyright (c) 2016 Michael Klement (mklement0@gmail.com), released under  
+the [MIT license](https://spdx.org/licenses/MIT).
+
+## EXAMPLES
+
+    # Activate (open existing window or run) the VM whose display name
+    # contains the substring "w10":
+    fvm w10
+
+    # Activate the VM whose display name contains the words "ubuntu" and "14":
+    fvm 'ubuntu.*14'
+
+    # Close the window of the VM whose display name is exactly "W7 (32-bit)"
+    fvm -x close "W7 (32-bit)"
+
+    # List all registered VMs by display name, guest OS, and VMX file path.
+    fvm ls
+
+    # List VMs whose display names contain the word "ubuntu", with VMs with 
+    # open windows printed first.
+    fvm -s ls 'ubuntu'
+
+    ## vmrun PASS-THROUGH EXAMPLES
+    ## All examples below use "w10" as the display-name regex for identifying
+    ## the target VM. 
+  
+    # Check if a VM has the VMware Tools are installed.
+    fvm checkToolsState w10
+
+    # List a VM's snapshots.
+    fvm listsnapshots w10
+
+    # Get the guest's IP address.
+    fvm getGuestIpAddress w10
+
+    # Runs a program asynchronously and interactively in the guest OS. 
+    fvm -gu jdoe -gp test runProgramInGuest w10 -nowait -interactive 'C:\WINDOWS\system32\calc.exe'
+
+EOF_MAN_PAGE

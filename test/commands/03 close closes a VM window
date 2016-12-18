@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+
+# ---
+# IMPORTANT: Use the following statement at the TOP OF EVERY TEST SCRIPT
+#            to ensure that this package's 'bin/' subfolder is added to the path so that
+#            this package's CLIs can be invoked by their mere filename in the rest
+#            of the script.
+# ---
+PATH=${PWD%%/test*}/bin:$PATH
+
+# Helper function for error reporting.
+die() { (( $# > 0 )) && echo "ERROR: $*" >&2; exit 1; }
+
+# NOTE: We do NOT put fvm in test mode, because we're interacting with a real VM
+export -n net_same2u_fvm_test
+
+# Get the display name of the real VM to use for testing, as determined by script 'setup_dir'.
+displayName=$(< /tmp/net.same2u.fvm-test/real-vm-display-name) || { echo "WARNING: Skipping, because no VM display name was provided by script 'setup_dir'." >&2; exit 0; }
+
+# Save the path to the currently frontmost application, so we can reactivate it later.
+prevActiveAppPath=$(osascript -e 'path to frontmost application as text')
+
+# !! Inexplicably, at times the close command below fails if the VM is paused:
+# !! the simulated click on the window's close button causes brief flickering,
+# !! but the VM isn't suspended, and the window isn't closed.
+# !! We work around that by unpausing and suspending the VM first.
+# !! (Seemingly suspending without unpausing first fails.)
+# !! However, suspending FAILS INTERMITTENTLY, with a follow-up error
+# !! of Fusion failing to quit with a spurious "User canceled" error.
+sleep 1
+fvm -x unpause "$displayName" || die "Unpausing VM failed: $displayName"
+sleep 4 # !! This sleep duration seems to be the key to not making the suspend fail.
+fvm -x suspend "$displayName" || die "Suspending VM failed: $displayName"
+
+# sleep 2 # sleep a little, just to be safe - !! without this, the window sometimes doesn't close
+fvm -x close "$displayName" || die "Closing VM failed: $displayName"
+
+osascript -e "activate application \"$prevActiveAppPath\""
+
+# Make sure that the VM is no longer listed as running
+state=$(fvm -xbs ls "$displayName" | awk -F'\t' '{print $3}')
+
+[[ $state == ' ' ]] || die "VM is unexpectedly still running: $displayName"
+
+exit 0

@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+
+# ---
+# IMPORTANT: Use the following statement at the TOP OF EVERY TEST SCRIPT
+#            to ensure that this package's 'bin/' subfolder is added to the path so that
+#            this package's CLIs can be invoked by their mere filename in the rest
+#            of the script.
+# ---
+PATH=${PWD%%/test*}/bin:$PATH
+
+# Execute your tests as shell commands below. 
+# An exit code of zero signals success, any other code signals an error
+# and causes this test to fail.
+# See https://github.com/tlevine/urchin.
+
+# Helper function for error reporting.
+die() { [ $# -gt 0 ] && echo "ERROR: $*" >&2; exit 1; }
+
+# Make sure that fvm runs in test mode.
+export net_same2u_fvm_test=1
+
+# A *.vmx file path and display name / regex from ../.fixture/mockups/vmInventory, copied to /tmp/net.same2u.fvm-test by script 'setup_dir'
+# The specific VM was chosen, because its display name works as both a literal display name and as a regex.
+vmxFile='/tmp/net.same2u.fvm-test/Virtual Machines/Debian.vmx'
+displayName='Debian 7-32'
+displayNameRegex="$displayName"
+
+[[ -x /tmp/net.same2u.fvm-test/vmrun ]] || die "Mockup version of \`vmrun\` not found. Did you run \`setup_dir\`?"
+
+opts=( -z ) # unknown option with own command
+fvm "${opts[@]}" ls "$displayNameRegex" 2>/dev/null && die "Invocation succeeded despite invalid options: ${opts[@]}"
+
+opts=( -xz ) # unknown option combined with valid own option
+fvm "${opts[@]}" ls "$displayName" 2>/dev/null && die "Invocation succeeded despite invalid options: ${opts[@]}"
+
+opts=( -xb )  # -b only applies to `ls`
+fvm "${opts[@]}" close "$displayName" 2>/dev/null && die "Invocation succeeded despite invalid options: ${opts[@]}"
+
+opts=( -x -gu jdoe -gp test )  # a command of ours that unexpectedly has vmrun-specific options
+fvm "${opts[@]}" close "$displayName" 2>/dev/null && die "Invocation succeeded, despite inapplicable vmrun options: ${opts[@]}"
+
+# --- Pass-thru commands
+
+opts=( -x -gu jdoe -gp test )  # a vmrun pass-thru command whose -x option should be "eaten" by fvm and the display-name operand translated to a *.vmx file
+[[ $(fvm "${opts[@]}" start "$displayName" | tail -n 1) == *.vmx ]] || die "Invocation failed unexpectedly: ${opts[@]}"
+
+# Note: Since we're running in test mode, it is our mockup `vmrun` that is 
+#       executed, which never indicates failure and simply echoes the expanded
+#       arguments back, one on each line.
+#       So the best we can do is to see if the command lines we expect are
+#       indeed passed through to `vmrun` by examining the 
+
+opts=( -z -gu jdoe -gp test -T fusion )  # a vmrun pass-thru command with options other than -x: *all* options should be accepted, as the assumption is that they're vmrun's  
+fvm "${opts[@]}" start "$displayNameRegex" >/dev/null || die "Invocation failed even though all options should be passed through: ${opts[@]}"
+
+opts=( -s -gu )  # a malformed vmrun pass-thru command - no operand
+fvm "${opts[@]}" start 2>/dev/null && die "Invocation succeeded despite a malformed vmrun pass-thru command: ${opts[@]}"
+
+exit 0

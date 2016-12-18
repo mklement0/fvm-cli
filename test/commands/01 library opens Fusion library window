@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+
+# ---
+# IMPORTANT: Use the following statement at the TOP OF EVERY TEST SCRIPT
+#            to ensure that this package's 'bin/' subfolder is added to the path so that
+#            this package's CLIs can be invoked by their mere filename in the rest
+#            of the script.
+# ---
+PATH=${PWD%%/test*}/bin:$PATH
+
+# Helper function for error reporting.
+die() { (( $# > 0 )) && echo "ERROR: $*" >&2; exit 1; }
+
+[[ -d '/Applications/VMware Fusion.app' ]] || { echo "WARNING: Skipping test: VMware Fusion not found in /Applications." >&2 && exit 0; }
+
+# Make sure that fvm runs in test mode.
+export net_same2u_fvm_test=1 
+
+# Save the path to the currently frontmost application, so we can reactivate it later.
+prevActiveAppPath=$(osascript -e 'path to frontmost application as text')
+
+# Activate Fusion's' library window.
+fvm library
+
+# Make sure Fusion is frontmost, with the library window frontmost.
+# !! This test won't work when a display language other than English is in effect.
+# !! To support such a scenario, the localized library window name would have to
+# !! be derived via the associated Window menu entry via the library window's
+# !! keyboard shortcut.  
+osascript - <<EOF || die
+  set ok to false
+  if frontmost of application id "com.vmware.fusion" then
+    tell application "System Events"
+      if "Virtual Machine Library" = name of front window of application process "VMware Fusion" then
+        set ok to true
+      end if
+    end tell
+  end if
+  activate application "$prevActiveAppPath"
+  if ok then
+    return
+  else
+    error "Fusion's library windows is unexpectedly not frontmost."
+  end if
+EOF
+
+exit 0

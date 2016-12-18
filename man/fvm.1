@@ -1,0 +1,304 @@
+.TH "FVM" "1" "December 2016" "v0.1.0-0" ""
+.SH "NAME"
+\fBfvm\fR \- manage VMware Fusion VMs
+.SH SYNOPSIS
+.P
+.RS 2
+.nf
+fvm      [\-t]          [library]
+fvm [\-x] [\-t]          [activate]   <displayNameRegexOrVmxFile>
+fvm [\-x]               close        <displayNameRegexOrVmxFile>
+fvm [\-x]               reveal       <displayNameRegexOrVmxFile>
+fvm [\-x]               edit         <displayNameRegexOrVmxFile>
+fvm [\-x] [\-b] [\-s]     ls           [<displayNameRegexFilter>]
+fvm                    quit
+fvm [\-x] start|pause|unpause|suspend|reset <displayNameRegexOrVmxFile>
+fvm [\-x] stop                       <displayNameRegexOrVmxFile> [soft|hard]
+  CAVEAT: Append 'soft' to prevent potential VM corruption\. 
+fvm [\-x] [<auth\-opts>] <vmrun\-cmd> [\.\.\.]
+fvm \-\-help\-vmrun
+
+\-t \.\.\. toggle activation (hotkey\-based invocations)
+\-x \.\.\. display name is specified literally, in full
+\-b \.\.\. bare, tab\-separated output for machine parsing
+\-s \.\.\. sort by status: running/paused VMs first
+\-\-help\-vmrun \.\.\. shows vmrun's command\-line help
+.fi
+.RE
+.P
+Standard options: \fB\-\-help\fP, \fB\-\-man\fP, \fB\-\-version\fP, \fB\-\-home\fP
+.SH DESCRIPTION
+.P
+\fBfvm\fP (\fIF\fRusion \fIV\fRM \fIM\fRanager) is a covenience wrapper around the \fBvmrun\fP
+.br
+CLI (https://www\.vmware\.com/support/pubs/fusion_pubs\.html) that comes with
+.br
+VMWare Fusion\.
+.P
+Its major areas of functionality are:
+.RS 0
+.IP \(bu 2
+VMs can be targeted by display name substrings (regular expressions)
+.br
+instead of having to specify their VMX file path\.
+.IP \(bu 2
+VMs in open windows can be activated or closed, their VMX files can be
+.br
+revealed in Finder or opened for editing, and Fusion can be quit as a whole\.
+.IP \(bu 2
+A list of all registered VMs can be obtained with subcommand \fBls\fP\|\.
+
+.RE
+.P
+Commands that have a mandatory \fB<displayNameRegexOrVmxFile>\fP operand allow
+.br
+targeting a specific VM in the following ways:
+.RS 0
+.IP \(bu 2
+By case\-insensitive POSIX\-compliant extended regular expression that
+.br
+unambiguously matches a VM's display name\.
+.br
+Note that this excludes use of word\-boundary assertions such as \fB\\b\fP\|\.
+.br
+It is sufficient for the expression to match only part of the VM's
+.br
+display name, as long as that part is unique among all registered VMs\.
+.br
+If multiple VMs match, an error is reported, and all matching display names
+.br
+are printed\.
+.br
+By contrast, the optional \fB<displayNameRegexFilter>\fP operand to the \fBls\fP
+.br
+merely acts a convenient filter and needn't match unambiguously\. 
+.IP \(bu 2
+If \fB\-x\fP is specified, the operand must be a VM's full, literal display name\.
+.IP \(bu 2
+Alternatively, the path to a VM's *\.vmx file may be specified, as is
+.br
+required when using \fBvmrun\fP directly\.
+
+.RE
+.SH COMMANDS
+.RS 0
+.IP \(bu 2
+\fBlibrary\fP
+.br
+activates VMWare Fusion's Library window\. If Fusion isn't running, it is
+.br
+started first\. This is the default command\.
+.IP \(bu 2
+\fBactivate\fP
+.br
+activates the specified VM in its existing window\. If it doesn't have a
+.br
+window, the VM is started, which opens it in a window and starts or resumes
+.br
+it\.
+.IP \(bu 2
+\fBclose\fP
+.br
+closes the specified VM's window\. The window is first activated, and what
+.br
+happens if the VM is running or paused depends on your Fusion preferences\.
+.br
+For instance, the VM may auto\-suspend before the window is closed\.
+.br
+If the VM has no open window, a message to that effect is prined to stderr,
+.br
+and no action is taken (and the exit code is still zero)\.
+.IP \(bu 2
+\fBreveal\fP
+.br
+reveals the specified VM's \fI\|\.vmx file inside its \fR\|\.vmwarevm bundle folder
+.br
+in Finder\.
+.IP \(bu 2
+\fBedit\fP
+.br
+opens the specified VM's *\.vmx file in the system's default text editor\.
+.IP \(bu 2
+\fBls\fP
+.br
+lists all registered VMs sorted case\-insensitively by display name by
+.br
+default\. If you add \fB\-s\fP, currently running or paused VMs are shown first\.
+.br
+The default display is columnated, with a header, for human consumption\.
+.br
+To get header\-less, tab\-separated data for programmatic consumption instead,
+.br
+use \fB\-b\fP\|\.
+.br
+The fields output for each VM are: display name, guest OS identifier, state,
+.br
+VMX file path\. The state field contains "on", if a VM is running or paused,
+and is blank (a single space when used with \fB\-b\fP) otherwise\.
+.br
+You may optionally specify a display\-name regex to filter the list by\.
+.IP \(bu 2
+\fBstart\fP, \fBpause\fP, \fBunpause\fP, \fBsuspend\fP, \fBreset\fP
+.br
+perform the requested power command via \fBvmrun\fP\|\. Note that these commands
+.br
+are no\-ops if the target VM is already in the requested state\.
+.IP \(bu 2
+\fBstop\fP
+.br
+stops the specified VM\.
+.br
+CAVEAT: The default mode is \fIhard\fR, which is the equivalent of pulling the
+.br
+power cord, which \fImay corrupt the VM\fR\|\.
+.br
+To be safe, append argument \fBsoft\fP, which gives the guest OS the chance
+.br
+to shut down properly\.
+.IP \(bu 2
+\fB<vmrun\-cmd>\fP
+.br
+represents all other commands that \fBvmrun\fP CLI supports, which cover a wide
+.br
+array of functionality, including managing snapshots,
+.br
+installing VMware Tools, and running commands inside a VM\.
+.br
+See examples below; for the complete list of supported commands, invoke this
+.br
+utility with \fB\-\-help\-vmrun\fP\|\.  
+.IP \(bu 2
+\fBquit\fP
+.br
+quits VMware Fusion synchronously, activating it first, so that prompts, if
+.br
+any, are visible\. Depending on how many VMs are running, quitting can
+.br
+take a while\.
+
+.RE
+.SH OPTIONS
+.RS 0
+.IP \(bu 2
+\fB\-x\fP, \fB\-\-exact\-name\fP
+specifies that the \fB<displayNameRegexOrVmxFile>\fP operand contain a literal,
+full display name that must match the display name of the targeted VM
+.br
+exactly\.
+.IP \(bu 2
+\fB\-t\fP, \fB\-\-toggle\-activation\fP
+.br
+can be combined with \fBlibrary\fP and \fBactivate\fP to achieve an activation
+.br
+toggle: if the specified VM or the library window is not currently
+.br
+frontmost, it is activated (made frontmost); if it already is frontmost,
+.br
+it is hidden\.
+.br
+Note that this option only makes sense if you launch \fBfvm\fP invisibly,
+.br
+such as by keyboard shortcut via Alfred (https://www\.alfredapp\.com/)\.
+.IP \(bu 2
+\fB\-b\fP, \fB\-\-bare\-output\fP
+.br
+switches the \fBls\fP command's output from the default, columated
+format to a header\-less, tab\-separated format, as described above\.
+.IP \(bu 2
+\fB\-s\fP, \fB\-\-by\-status\fP
+.br
+makes the \fBls\fP command list running or paused VMs first\. Inside each group
+.br
+the VMs are sorted case\-sensitively by display name\.
+.br
+To see \fIonly\fR running or paused VMs, you may also use \fBfvm list\fP to pass
+.br
+the \fBlist\fP command through to \fBvmrun\fP, but note that they will be listed
+.br
+by VMX file path only\.
+.IP \(bu 2
+\fB<auth\-opts>\fP
+.br
+The authorization options to pass through to \fBvmrun\fP, for in\-guest
+.br
+operations, namely: \fB\-gu <username>\fP, \fB\-gp <password>\fP to specify guest
+.br
+credentials, and, in case of an encrypted virtual machine, additionally
+.br
+\fB\-vp <vm\-password>\fP\|\.
+.br
+Note, however, that you may omit these options, in which case you'll be
+.br
+prompted interactively\.
+
+.RE
+.SH STANDARD OPTIONS
+.P
+All standard options must be provided as the only argument; all of them provide
+.br
+information only\.
+.RS 0
+.IP \(bu 2
+\fB\-h, \-\-help\fP
+.br
+Prints the contents of the synopsis chapter to stdout for quick reference\.
+.IP \(bu 2
+\fB\-\-man\fP
+.br
+Displays this manual page, which is a helpful alternative to using \fBman\fP,
+.br
+if the manual page isn't installed\.
+.IP \(bu 2
+\fB\-\-version\fP
+.br
+Prints version information\.
+.IP \(bu 2
+\fB\-\-home\fP
+.br
+Opens this utility's home page in the system's default web browser\.
+
+.RE
+.SH LICENSE
+.P
+Copyright (c) 2016 Michael Klement (mklement0@gmail\.com), released under
+.br
+the MIT license \fIhttps://spdx\.org/licenses/MIT\fR\|\.
+.SH EXAMPLES
+.P
+.RS 2
+.nf
+# Activate (open existing window or run) the VM whose display name
+# contains the substring "w10":
+fvm w10
+
+# Activate the VM whose display name contains the words "ubuntu" and "14":
+fvm 'ubuntu\.*14'
+
+# Close the window of the VM whose display name is exactly "W7 (32\-bit)"
+fvm \-x close "W7 (32\-bit)"
+
+# List all registered VMs by display name, guest OS, and VMX file path\.
+fvm ls
+
+# List VMs whose display names contain the word "ubuntu", with running  
+# or paused ones printed first\.
+fvm \-s ls 'ubuntu'
+
+## vmrun PASS\-THROUGH EXAMPLES
+## All examples below use "w10" as the display\-name regex for identifying
+## the target VM\. 
+
+# Check if a VM has the VMware Tools are installed\.
+fvm checkToolsState w10
+
+# List a VM's snapshots\.
+fvm listsnapshots w10
+
+# Get the guest's IP address\.
+fvm getGuestIpAddress w10
+
+# Runs a program asynchronously and interactively in the guest OS\. 
+fvm \-gu jdoe \-gp test runProgramInGuest w10 \-nowait \-interactive 'C:\\WINDOWS\\system32\\calc\.exe'
+.fi
+.RE
+

@@ -1,0 +1,6 @@
+VM Display Name                                     Guest OS   VMX path
+---------------                                     --------   --------
+Ubuntu 12.04 - 32bit - Precise Pangolin             ubuntu     /tmp/net.same2u.fvm-test/Virtual Machines/Ubuntu12.04-32bit.vmx
+Ubuntu 12.04 - 32bit - Precise Pangolin - PRISTINE  ubuntu     /tmp/net.same2u.fvm-test/Virtual Machines/Ubuntu 12.04 - 32.vmx
+Ubuntu 14.04 - 32bit - Trusty Tahr                  ubuntu     /tmp/net.same2u.fvm-test/Virtual Machines/Ubuntu-14.04-32bit.vmx
+Ubuntu 16.04 (64-bit)                               ubuntu-64  /tmp/net.same2u.fvm-test/Virtual Machines/Ubuntu16.04 (64-bit).vmx

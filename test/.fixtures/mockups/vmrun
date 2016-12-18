@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+
+# This is a mock version of the `vmrun` CLI that comes with VMware Fusion,
+# designed for testing.
+
+# For 'list' as the only argument, we output hard-coded VMX paths that are
+# a subset of the ones referenced in the `vmInventory` file in the same 
+# directory as this script, so that tests of `fvm ls` get predictable status
+# information regarding the "running" VMs.
+if [[ $(tr '[:upper:]' '[:lower:]' <<<"$@") == 'list' ]]; then
+
+  cat <<'EOF'
+/tmp/net.same2u.fvm-test/Virtual Machines/Debian.vmx
+/tmp/net.same2u.fvm-test/Virtual Machines/W7U64.vmx
+EOF
+
+# All other command lines: simply print the (expanded, quote-removed)
+# arguments line by line.
+else
+
+  printf '%s\n' "$@"
+
+fi

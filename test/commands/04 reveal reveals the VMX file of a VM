@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+
+# ---
+# IMPORTANT: Use the following statement at the TOP OF EVERY TEST SCRIPT
+#            to ensure that this package's 'bin/' subfolder is added to the path so that
+#            this package's CLIs can be invoked by their mere filename in the rest
+#            of the script.
+# ---
+PATH=${PWD%%/test*}/bin:$PATH
+
+# Helper function for error reporting.
+die() { (( $# > 0 )) && echo "ERROR: $*" >&2; exit 1; }
+
+#   Quotes (escapes) the specified literal text for use in a regular expression
+quoteRe() { sed -e 's/[^^]/[&]/g; s/\^/\\^/g; $!a\'$'\n''\\n' <<<"$1" | tr -d '\n'; }
+
+# Make sure that fvm runs in test mode.
+export net_same2u_fvm_test=1
+
+vmxPath='/tmp/net.same2u.fvm-test/Virtual Machines/Debian 7.8 32-bit.vmx'
+# Determine the VM's display name.
+displayName=$(grep '^displayName = ' "$vmxPath" | cut -d\" -f2)
+# Turn it into a regex (this assumes that "." is the only metchar. that needs escaping)
+displayNameRegex="^${displayName//./\.}\$"
+
+# Save the path to the currently frontmost application, so we can reactivate it later.
+prevActiveAppPath=$(osascript -e 'path to frontmost application as text')
+
+fvm reveal "$displayNameRegex" || die
+
+path=$(osascript - <<EOF
+  repeat 10 times
+    delay 0.2
+    if frontmost of application "Finder" then exit repeat
+  end repeat
+  set fpath to POSIX path of (selection of application "Finder" as text)
+  tell application "Finder" to close front window
+  activate application "$prevActiveAppPath"
+  return fpath
+EOF
+)
+
+# !! /tmp is a symlink to /private/tmp, which is what Finder reports.
+[[ $path == "/private$vmxPath" ]] || die "VMX file path unexpectedly not revealed in Finder: $vmxPath"
+
+exit 0

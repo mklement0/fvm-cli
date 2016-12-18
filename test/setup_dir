@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+
+# ---
+# IMPORTANT: Use the following statement at the TOP OF EVERY TEST SCRIPT
+#            to ensure that this package's 'bin/' subfolder is added to the path so that
+#            this package's CLIs can be invoked by their mere filename in the rest
+#            of the script.
+# ---
+PATH=${PWD%%/test*}/bin:$PATH
+
+# Helper function for error reporting.
+die() { [ $# -gt 0 ] && echo "ERROR: $*" >&2; exit 1; }
+
+# Helper function for finding a *real* VM that is actually registered 
+# on the current system, assuming VMware Fusion is installed.
+# We prefer FreeBSD or Debian, because we know them to be on the small side
+# but ultimately we use any installed VM we can find.
+getLightweightVmDisplayName() {
+  local registeredVms displayName
+  # Determine all registered VMs
+  # Note that fvm must NOT be in test mode for this.
+  registeredVms=$(fvm -b ls)
+  # Look for a preferred VM, and, if none is found, ultimately use the first
+  # registered one.
+  for n in freebsd debian ''; do
+    IFS=$'\t' read -r displayName _  < <(grep -m 1 "$n" <<<"$registeredVms")    
+    [[ -n $displayName ]] && { printf '%s' "$displayName"; return 0; } 
+  done
+  return 2
+}
+
+# ------
+
+# Set up a temp. dir to copy our mockup files to.
+tmpDirRoot='/tmp/net.same2u.fvm-test/'
+
+mkdir -p "$tmpDirRoot" || die "Failed to create temp. dir: $tmpDirRoot"
+
+# Copy mockup files
+# Note: The entries in the 'vmInventory' mockup file at the root of .fixtures/mockups/ must point 
+#       to the 'Virtual Machines' subfolder "$tmpDirRoot", where the *.vmx files are copied. 
+# cp -R ../.fixtures/mockups/. "$tmpDirRoot"
+cp -R ./.fixtures/mockups/. "$tmpDirRoot"
+
+# For the tests that interact with a real, registered VM on this machine,
+# we determine the display name of one of the registered VMs, preferably
+# a lightweight one.
+# The tests that interact with this VM should use the following line to test for the presence of a real test VM:
+#  displayName=$(< /tmp/net.same2u.fvm-test/real-vm-display-name) || { echo "WARNING: Skipping, because no VM display name was provided by script 'setup_dir'." >&2; exit 0; }
+if [[ -d '/Applications/VMware Fusion.app' ]]; then
+  displayName=$(getLightweightVmDisplayName) || die "No registered VMs found or fvm ls failed unexpectedly."
+  printf '%s\n' "$displayName" > "$tmpDirRoot/real-vm-display-name"
+else
+   echo "WARNING: Skipping real-VM interaction tests: VMware Fusion not found in /Applications." >&2
+fi
+
+exit 0

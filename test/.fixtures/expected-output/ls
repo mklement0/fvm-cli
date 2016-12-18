@@ -1,0 +1,24 @@
+VM Display Name                                     Guest OS       VMX path
+---------------                                     --------       --------
+CentOS 6.5 64-bit                                   centos-64      /tmp/net.same2u.fvm-test/Virtual Machines/CentOS 6.5 64-bit.vmx
+Debian 7-32                                         other26xlinux  /tmp/net.same2u.fvm-test/Virtual Machines/Debian.vmx
+Debian 7.8 32-bit                                   debian7        /tmp/net.same2u.fvm-test/Virtual Machines/Debian 7.8 32-bit.vmx
+Fedora 20 64-bit                                    fedora-64      /tmp/net.same2u.fvm-test/Virtual Machines/Fedora 64-bit.vmx
+FreeBSD 10.0 64-bit                                 freebsd-64     /tmp/net.same2u.fvm-test/Virtual Machines/FreeBSD 10.0 64-bit.vmx
+FreeBSD 10.1 64-bit                                 freebsd-64     /tmp/net.same2u.fvm-test/Virtual Machines/FreeBSD 10.1 64-bit.vmx
+FreeBSD 10.1.2 64-bit                               freebsd-64     /tmp/net.same2u.fvm-test/Virtual Machines/FreeBSD 10.1.2 64-bit.vmx
+Mac OS X - KARL                                     darwin15-64    /tmp/net.same2u.fvm-test/Virtual Machines/Mac OS X - KARL.9.vmx
+Mac OS X 10.10 Yosemite                             darwin14-64    /tmp/net.same2u.fvm-test/Virtual Machines/Mac OS X 10.10.vmx
+Mac OS X 10.10 Yosemite - PRISTINE                  darwin14-64    /tmp/net.same2u.fvm-test/Virtual Machines/Mac OS X 10.10 Yosemite@pristine.vmx
+Mac OS X 10.11 El Capitan - with Betas              darwin15-64    /tmp/net.same2u.fvm-test/Virtual Machines/Mac OS X 10.11.vmx
+Mac OS X 10.8 - Mountain Lion                       darwin12-64    /tmp/net.same2u.fvm-test/Virtual Machines/Mac OS X 10.8 64-bit.vmx
+Mac OS X 10.9 Mavericks - Pristine                  darwin13-64    /tmp/net.same2u.fvm-test/Virtual Machines/Mac OS X 10.9 Mavericks - Pristine.vmx
+PCBSD 10.1 64-bit                                   freebsd-64     /tmp/net.same2u.fvm-test/Virtual Machines/PCBSD 10.1 64-bit.vmx
+Ubuntu 12.04 - 32bit - Precise Pangolin             ubuntu         /tmp/net.same2u.fvm-test/Virtual Machines/Ubuntu12.04-32bit.vmx
+Ubuntu 12.04 - 32bit - Precise Pangolin - PRISTINE  ubuntu         /tmp/net.same2u.fvm-test/Virtual Machines/Ubuntu 12.04 - 32.vmx
+Ubuntu 14.04 - 32bit - Trusty Tahr                  ubuntu         /tmp/net.same2u.fvm-test/Virtual Machines/Ubuntu-14.04-32bit.vmx
+Ubuntu 16.04 (64-bit)                               ubuntu-64      /tmp/net.same2u.fvm-test/Virtual Machines/Ubuntu16.04 (64-bit).vmx
+W10 Pro 64-bit                                      windows9-64    /tmp/net.same2u.fvm-test/Virtual Machines/W1064bit.vmx
+W7U32-Personal                                      windows7       /tmp/net.same2u.fvm-test/Virtual Machines/W7U32-Personal.vmx
+W7U64                                               windows7-64    /tmp/net.same2u.fvm-test/Virtual Machines/W7U64.vmx
+Xp32                                                winxppro       /tmp/net.same2u.fvm-test/Virtual Machines/Xp32.vmx

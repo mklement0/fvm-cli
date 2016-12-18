@@ -1,0 +1,47 @@
+{
+  "name": "fvm-cli",
+  "version": "0.1.0-0",
+  "os": [
+    "darwin"
+  ],
+  "description": "macOS CLI for managing VMware Fusion VMs.",
+  "bin": {
+    "fvm": "bin/fvm"
+  },
+  "preferGlobal": true,
+  "homepage": "https://github.com/mklement0/fvm-cli",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mklement0/fvm-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mklement0/fvm-cli/issues"
+  },
+  "keywords": [
+    "VM",
+    "virtual machine",
+    "VMware Fusion",
+    "manage",
+    "power state",
+    "window state",
+    "CLI",
+    "macos",
+    "osx"
+  ],
+  "author": "Michael Klement <mklement0@gmail.com> (http://same2u.net)",
+  "license": "MIT",
+  "devDependencies": {
+    "json": "^9.0.3",
+    "marked-man": "^0.1.6",
+    "replace": "^0.3.0",
+    "semver": "^4.2.0",
+    "tap": "^0.6.0",
+    "urchin": "^0.0.5"
+  },
+  "net_same2u": {
+    "make_pkg": {
+      "manOn": true
+    }
+  },
+  "man": "./man/fvm.1"
+}

@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+# ---
+# IMPORTANT: Use the following statement at the TOP OF EVERY TEST SCRIPT
+#            to ensure that this package's 'bin/' subfolder is added to the path so that
+#            this package's CLIs can be invoked by their mere filename in the rest
+#            of the script.
+# ---
+PATH=${PWD%%/test*}/bin:$PATH
+
+# Helper function for error reporting.
+die() { (( $# > 0 )) && echo "ERROR: $*" >&2; exit 1; }
+
+#   Quotes (escapes) the specified literal text for use in a regular expression
+quoteRe() { sed -e 's/[^^]/[&]/g; s/\^/\\^/g; $!a\'$'\n''\\n' <<<"$1" | tr -d '\n'; }
+
+# Make sure that fvm runs in test mode.
+export net_same2u_fvm_test=1
+
+vmxPath='/tmp/net.same2u.fvm-test/Virtual Machines/Debian 7.8 32-bit.vmx'
+# Determine the VM's display name.
+displayName=$(grep '^displayName = ' "$vmxPath" | cut -d\" -f2)
+# Turn it into a regex (this assumes that "." is the only metchar. that needs escaping)
+displayNameRegex="^${displayName//./\.}\$"
+
+# Note: In test mode, edit simply echoes the VMX path
+vmxPathOut=$(fvm edit "$displayNameRegex")
+
+[[ $vmxPath == "$vmxPathOut" ]] || die "The edit command unexpectedly didn't echo the expected VMX file path: [$vmxPath] vs. [$vmxPathOut]"
+
+exit 0

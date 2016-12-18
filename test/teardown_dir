@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+# Remove the temp. dir.
+tmpDirRoot='/tmp/net.same2u.fvm-test/'
+rm -rf "$tmpDirRoot"
+
+exit 0

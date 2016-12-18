@@ -1,0 +1,12 @@
+#!/bin/sh
+
+# Helper function for error reporting.
+die() { [ $# -gt 0 ] && echo "ERROR: $*" >&2; exit 1; }
+
+# Make sure that we're running on OS X.
+[ "$(uname)" = 'Darwin' ] || die "FAILED TEST PREREQUISITE: Can only run on OSX."
+
+# Note: We don't strictly require that VMware Fusion be installed, because
+#       the majority of tests can be run without i.
+
+exit 0

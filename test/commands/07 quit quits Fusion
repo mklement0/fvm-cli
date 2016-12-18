@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+
+# ---
+# IMPORTANT: Use the following statement at the TOP OF EVERY TEST SCRIPT
+#            to ensure that this package's 'bin/' subfolder is added to the path so that
+#            this package's CLIs can be invoked by their mere filename in the rest
+#            of the script.
+# ---
+PATH=${PWD%%/test*}/bin:$PATH
+
+# Helper function for error reporting.
+die() { (( $# > 0 )) && echo "ERROR: $*" >&2; exit 1; }
+
+[[ -d '/Applications/VMware Fusion.app' ]] || { echo "WARNING: Skipping test: VMware Fusion not found in /Applications." >&2 && exit 0; }
+
+# Make sure that fvm runs in test mode.
+export net_same2u_fvm_test=1
+
+# Save the path to the currently frontmost application, so we can reactivate it later.
+prevActiveAppPath=$(osascript -e 'path to frontmost application as text')
+
+fvm quit || die
+
+# Wait for Fusion to finish quitting, which can take a while.
+res=$(osascript - <<EOF || die
+  repeat 20 times
+    if not running of application id "com.vmware.fusion" then
+      return true
+    end if
+    delay 1
+  end repeat
+  return false
+EOF
+)
+
+[[ $res == 'true' ]] || die "Fusion is unexpectedly still running."
+
+exit 0

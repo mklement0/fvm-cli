@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+
+# ---
+# IMPORTANT: Use the following statement at the TOP OF EVERY TEST SCRIPT
+#            to ensure that this package's 'bin/' subfolder is added to the path so that
+#            this package's CLIs can be invoked by their mere filename in the rest
+#            of the script.
+# ---
+PATH=${PWD%%/test*}/bin:$PATH
+
+# Helper function for error reporting.
+die() { (( $# > 0 )) && echo "ERROR: $*" >&2; exit 1; }
+
+vmxPath='/tmp/net.same2u.fvm-test/Virtual Machines/Ubuntu16.04 (64-bit).vmx'
+displayName="Ubuntu 16.04 (64-bit)"  # full, literal display name - must match the one defined inside the *.vmx file above.
+displayNameRegex="ubuntu.*16"        # substring regex that must uniquely identify the same VM among all those defined in ./.fixtures/mockups/vmInventory 
+
+# Make sure that fvm runs in test mode.
+export net_same2u_fvm_test=1
+
+# fvm list invokes `vmrun list`, which is the only subcommand
+# that our mock `vmrun` returns (hard-coded) data for.
+diff <(fvm list) <(/tmp/net.same2u.fvm-test/vmrun list) || die "'list' returned unexpected output"
+
+# -- pass-thru commands that intermingle with our own -x option
+#    and/or have additional, vmrun-specific operands / NexT-style options
+
+cmd=( fvm -x start "$displayName" )
+diff <( "${cmd[@]}" ) <(cat <<EOF 
+start
+$vmxPath
+EOF
+) || die "Unexpected vmrun-pass-thru output from: ${cmd[@]}"
+
+cmd=( fvm -x stop "$displayName" soft )
+diff <( "${cmd[@]}" ) <(cat <<EOF 
+stop
+$vmxPath
+soft
+EOF
+) || die "Unexpected vmrun-pass-thru output from: ${cmd[@]}"
+
+cmd=( fvm -gu jdoe -gp test runProgramInGuest "$displayNameRegex" -nowait -interactive "'C:\WINDOWS\system32\calc.exe'" )
+diff <( "${cmd[@]}" ) <(cat <<EOF 
+-gu
+jdoe
+-gp
+test
+runProgramInGuest
+$vmxPath
+-nowait
+-interactive
+'C:\WINDOWS\system32\calc.exe'
+EOF
+) || die "Unexpected vmrun-pass-thru output from: ${cmd[@]}"
+
+exit 0

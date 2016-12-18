@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+
+# ---
+# IMPORTANT: Use the following statement at the TOP OF EVERY TEST SCRIPT
+#            to ensure that this package's 'bin/' subfolder is added to the path so that
+#            this package's CLIs can be invoked by their mere filename in the rest
+#            of the script.
+# ---
+PATH=${PWD%%/test*}/bin:$PATH
+
+# Helper function for error reporting.
+die() { (( $# > 0 )) && echo "ERROR: $*" >&2; exit 1; }
+
+#   Quotes (escapes) the specified literal text for use in a regular expression
+quoteRe() { sed -e 's/[^^]/[&]/g; s/\^/\\^/g; $!a\'$'\n''\\n' <<<"$1" | tr -d '\n'; }
+
+# Helper function that takes `fvm start` output from the mockup `vmrun` 
+# and makes sure that its last line is identical to the expected "$vmxPath"    
+assertOk() {
+  local output lastLine
+  output=$("$@") || die # We assume that fvm's stderr output is enough
+  lastLine=$(tail -n 1 <<<"$output") 
+  [[ $lastLine == "$vmxPath" ]] || die "Unexpected output from [$@]: expected [$vmxPath], got [$lastLine]" 
+}
+
+# Make sure that fvm runs in test mode.
+export net_same2u_fvm_test=1
+
+vmxPath='/tmp/net.same2u.fvm-test/Virtual Machines/Ubuntu16.04 (64-bit).vmx'
+# Determine the VM's display name.
+displayName=$(grep '^displayName = ' "$vmxPath" | cut -d\" -f2)
+# Turn it into a regex (this assumes that "()" is the only metchar. that needs escaping)
+displayNameRegex="^$(quoteRe "$displayName")\$"
+
+# Note: We use `fvm start` as the test command, because
+# it invokes our mock `vmrun`, which simply echoes the resolved parameters
+# back to us.
+
+# -- Should-FAIL tests
+
+fvm start ^. 2>/dev/null && die "A display-name regex that matches multiple VMs was unexpectedly not reported as an error."
+
+fvm start 'a(b'  2>/dev/null && die "An invalid display-name regex was unexpectedly not reported as an error."
+
+# -- Should-SUCCEED tests
+# We construct these test so that
+# the last argument (i.e., the last output line) is the VMX file path of
+# the VM that the display-name rexge resolves to.
+
+cmd=( fvm -x start "$displayName" )
+assertOk "${cmd[@]}"
+
+cmd=( fvm start "$displayNameRegex" )
+assertOk "${cmd[@]}"
+
+# Note: This test uses a hard-coded substring regex of display name
+#       "Ubuntu 16.04 (64-bit)", as contained in file $vmxPath, which is
+#       assumed to uniquely identify a VM among those defined in 
+#       ./.fixtures/mockups/vmInventory
+cmd=( fvm start 'ubuntu.*16' )
+assertOk "${cmd[@]}"
+
+exit 0

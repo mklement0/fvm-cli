@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+
+# ---
+# IMPORTANT: Use the following statement at the TOP OF EVERY TEST SCRIPT
+#            to ensure that this package's 'bin/' subfolder is added to the path so that
+#            this package's CLIs can be invoked by their mere filename in the rest
+#            of the script.
+# ---
+PATH=${PWD%%/test*}/bin:$PATH
+
+# Helper function for error reporting.
+die() { (( $# > 0 )) && echo "ERROR: $*" >&2; exit 1; }
+
+# Make sure that fvm runs in test mode.
+export net_same2u_fvm_test=1
+
+diff <(fvm ls) ../.fixtures/expected-output/ls || die "ls"
+
+diff <(fvm -s ls) ../.fixtures/expected-output/ls-s || die "-s ls"
+
+diff <(fvm -b ls) ../.fixtures/expected-output/ls-b || die "-b ls"
+
+diff <(fvm -bs ls) ../.fixtures/expected-output/ls-bs || die "-bs ls"
+
+diff <(fvm ls ubuntu) ../.fixtures/expected-output/ls-ubuntu || die "ls ubuntu"
+
+diff <(fvm -bs ls ubuntu) ../.fixtures/expected-output/ls-bs-ubuntu || die "-bs ls ubuntu"
+
+diff <(fvm -bsx ls 'Ubuntu 16.04 (64-bit)') ../.fixtures/expected-output/ls-bsx-ubuntu || die "-bsx ls 'Ubuntu 16.04 (64-bit)'"
+
+
+exit 0

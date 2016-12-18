@@ -1,0 +1,218 @@
+#!/usr/bin/vmplayer
+# Generic Linux
+.encoding = "UTF-8"
+
+# This is a Workstation 6 config file
+# It can be used with Player
+config.version = "8"
+virtualHW.version = "12"
+
+# Selected operating system for your virtual machine
+guestOS = "other26xlinux"
+
+# displayName is your own name for the virtual machine
+displayName = "Debian 7-32"
+
+# These fields are free text description fields
+guestinfo.vmware.product.class = "virtual machine"
+
+# Number of virtual CPUs. Your virtual machine will not
+# work if this number is higher than the number of your physical CPUs
+numvcpus = "1"
+
+# Memory size and other memory settings
+memsize = "1024"
+MemAllowAutoScaleDown = "FALSE"
+MemTrimRate = "-1"
+
+# PowerOn/Off options
+gui.powerOnAtStartup = "FALSE"
+gui.fullScreenAtPowerOn = "TRUE"
+gui.exitAtPowerOff = "FALSE"
+
+# Unique ID for the virtual machine will be created
+uuid.action = "create"
+
+# Settings for VMware Tools
+tools.remindInstall = "FALSE"
+tools.upgrade.policy = "useGlobal"
+
+# Startup hints interfers with automatic startup of a virtual machine
+# This setting has no effect in VMware Player
+hints.hideAll = "TRUE"
+
+# Enable time synchronization between computer
+# and virtual machine
+tools.syncTime = "FALSE"
+
+# USB settings
+# This config activates USB
+usb.present = "TRUE"
+usb.generic.autoconnect = "FALSE"
+
+# First serial port, physical COM1 is available
+serial0.present = "TRUE"
+serial0.fileName = "Auto Detect"
+serial0.autodetect = "TRUE"
+serial0.hardwareFlowControl = "TRUE"
+
+# Optional second serial port, physical COM2 is not available
+# the original has the next line
+
+# First parallell port, physical LPT1 is available
+parallel0.present = "TRUE"
+parallel0.fileName = "Auto Detect"
+parallel0.autodetect = "TRUE"
+parallel0.bidirectional = "TRUE"
+
+# Sound settings
+sound.present = "TRUE"
+sound.fileName = "-1"
+sound.autodetect = "TRUE"
+
+# Logging
+# This config activates logging, and keeps last log
+logging = "TRUE"
+log.fileName = "Debian.log"
+log.append = "TRUE"
+log.keepOld = "1"
+
+# These settings decides interaction between your
+# computer and the virtual machine
+isolation.tools.hgfs.disable = "FALSE"
+isolation.tools.dnd.disable = "FALSE"
+isolation.tools.copy.enable = "TRUE"
+isolation.tools.paste.enabled = "TRUE"
+
+# Other default settings
+svga.autodetect = "TRUE"
+mks.keyboardFilter = "allow"
+# snapshot.action = "autoCommit"
+
+# First network interface card
+ethernet0.present = "TRUE"
+ethernet0.virtualDev = "vlance"
+ethernet0.connectionType = "nat"
+ethernet0.addressType = "generated"
+ethernet0.generatedAddressOffset = "0"
+
+# Settings for physical floppy drive
+# the original has the next line
+# floppy0.present = "FALSE"
+
+# First IDE disk, size 20Gb
+ide0:0.present = "TRUE"
+ide0:0.fileName = "Debian.vmdk"
+ide0:0.mode = "persistent"
+ide0:0.startConnected = "TRUE"
+ide0:0.writeThrough = "TRUE"
+
+# Second IDE disk, size 100Gb
+
+# Settings for physical CDROM drive
+ide1:0.present = "TRUE"
+ide1:0.startConnected = "FALSE"
+ide1:0.autodetect = "TRUE"
+
+ide1:0.fileName = "auto detect"
+ide1:0.deviceType = "cdrom-raw"
+
+# Experimental!
+# Accelerated 3-D Graphics
+# the original has the next 3 lines
+# mks.enable3d = "TRUE"
+# svga.vramSize = "67108864"
+# vmmouse.present = "TRUE"
+
+# END OF CONFIG
+extendedConfigFile = "Debian.vmxf"
+virtualHW.productCompatibility = "hosted"
+pciBridge4.present = "TRUE"
+pciBridge4.virtualDev = "pcieRootPort"
+pciBridge4.pciSlotNumber = "21"
+pciBridge4.functions = "8"
+pciBridge5.present = "TRUE"
+pciBridge5.virtualDev = "pcieRootPort"
+pciBridge5.pciSlotNumber = "22"
+pciBridge5.functions = "8"
+pciBridge6.present = "TRUE"
+pciBridge6.virtualDev = "pcieRootPort"
+pciBridge6.pciSlotNumber = "23"
+pciBridge6.functions = "8"
+pciBridge7.present = "TRUE"
+pciBridge7.virtualDev = "pcieRootPort"
+pciBridge7.pciSlotNumber = "24"
+pciBridge7.functions = "8"
+vmci0.present = "TRUE"
+hpet0.present = "TRUE"
+usb.vbluetooth.startConnected = "TRUE"
+vcpu.hotadd = "TRUE"
+mem.hotadd = "TRUE"
+ethernet0.linkStatePropagation.enable = "TRUE"
+checkpoint.vmState = ""
+ethernet0.generatedAddress = "00:0c:29:7f:89:04"
+ethernet0.pciSlotNumber = "17"
+usb.pciSlotNumber = "16"
+sound.pciSlotNumber = "18"
+vmci0.id = "-2031143811"
+vmci0.pciSlotNumber = "19"
+uuid.location = "56 4d f1 c7 c8 f1 27 d7-ac f5 f7 b0 bb 7f 89 04"
+uuid.bios = "56 4d f1 c7 c8 f1 27 d7-ac f5 f7 b0 bb 7f 89 04"
+cleanShutdown = "FALSE"
+replay.supported = "FALSE"
+replay.filename = ""
+ide0:0.redo = ""
+usb:1.present = "TRUE"
+vmotion.checkpointFBSize = "79691776"
+softPowerOff = "FALSE"
+usb:1.speed = "2"
+usb:1.deviceType = "hub"
+usb:1.port = "1"
+usb:1.parent = "-1"
+parallel0.startConnected = "FALSE"
+serial0.startConnected = "FALSE"
+floppy0.startConnected = "FALSE"
+keyboardAndMouseProfile = "macProfile 5227741b-ede9-d423-e14e-d11721ec"
+gui.exitOnCLIHLT = "TRUE"
+monitor.phys_bits_used = "42"
+gui.lastPoweredViewMode = "windowed"
+gui.viewModeAtPowerOn = "windowed"
+migrate.hostlog = "./Debian-e6971b8f.hlog"
+vmotion.checkpointSVGAPrimarySize = "79691776"
+acpi.smbiosVersion2.7 = "FALSE"
+rollingTier0.uid = "1"
+rollingTier0.interval = "86400"
+rollingTier0.maximum = "1"
+rollingTier0.live = "FALSE"
+rollingTier0.clientFlags = "8"
+rollingTier0.displayName = "AutoProtect Snapshot"
+rollingTier1.uid = "2"
+rollingTier1.interval = "604800"
+rollingTier1.baseTier = "1"
+rollingTier1.baseTierInterval = "7"
+rollingTier1.maximum = "1"
+rollingTier1.live = "FALSE"
+rollingTier1.clientFlags = "8"
+rollingTier1.displayName = "AutoProtect Snapshot"
+rollingTier2.uid = "3"
+rollingTier2.interval = "2419200"
+rollingTier2.baseTier = "1"
+rollingTier2.baseTierInterval = "28"
+rollingTier2.maximum = "1"
+rollingTier2.live = "FALSE"
+rollingTier2.clientFlags = "8"
+rollingTier2.displayName = "AutoProtect Snapshot"
+snapshot.numRollingTiers = "3"
+rollingTier0.timeSincelast = "215261"
+rollingTier1.timeSincelast = "215261"
+rollingTier2.timeSincelast = "215261"
+ide0:1.present = "FALSE"
+serial1.present = "FALSE"
+rollingTier1.baseTierSnapshotCount = "2"
+rollingTier2.baseTierSnapshotCount = "2"
+toolsInstallManager.updateCounter = "1"
+usb:0.present = "TRUE"
+usb:0.deviceType = "hid"
+usb:0.port = "0"
+usb:0.parent = "-1"
+unity.wasCapable = "TRUE"

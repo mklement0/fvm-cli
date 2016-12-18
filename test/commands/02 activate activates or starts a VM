@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+
+# ---
+# IMPORTANT: Use the following statement at the TOP OF EVERY TEST SCRIPT
+#            to ensure that this package's 'bin/' subfolder is added to the path so that
+#            this package's CLIs can be invoked by their mere filename in the rest
+#            of the script.
+# ---
+PATH=${PWD%%/test*}/bin:$PATH
+
+# Helper function for error reporting.
+die() { (( $# > 0 )) && echo "ERROR: $*" >&2; exit 1; }
+
+# NOTE: We do NOT put fvm in test mode, because we're interacting with a real VM
+export -n net_same2u_fvm_test
+
+# Get the display name of the real VM to use for testing, as determined by script 'setup_dir'.
+displayName=$(< /tmp/net.same2u.fvm-test/real-vm-display-name) || { echo "WARNING: Skipping, because no VM display name was provided by script 'setup_dir'." >&2; exit 0; }
+
+# Save the path to the currently frontmost application, so we can reactivate it later.
+prevActiveAppPath=$(osascript -e 'path to frontmost application as text')
+
+# Activate the VM
+fvm -x "$displayName"
+
+# Make sure Fusion is frontmost, with the target VM frontmost.
+# !! This assumes that the VM is now *running*; if it is paused or suspended, 
+# !! `name of front window` below will return the *empty string*.
+osascript - <<EOF || die
+  set ok to false
+  if frontmost of application id "com.vmware.fusion" then
+    tell application "System Events"
+      if "$displayName" = name of front window of application process "VMware Fusion" then
+        set ok to true
+      end if
+    end tell
+  end if
+  if ok then
+    return
+  else
+    error "VM is unexpectedly not frontmost: $displayName"
+  end if
+EOF
+
+# Now, use -t (toggle) to deactivate the VM again.
+fvm -t -x "$displayName" || die
+sleep 1 # sleep a little, just to be safe
+
+# Make sure the previously active app is active again.
+activeAppPath=$(osascript -e 'path to frontmost application as text')
+[[ "$activeAppPath" == "$prevActiveAppPath" ]] || die "Toggling after starting did not return to the previously active application: expected: '$prevActiveAppPath'; actual: '$activeAppPath'"
+
+# Now *pause* the VM to test a variation of toggling:
+# Fusion inexplicably reports an empty window name when the VM is not running,
+# in which case we must find the name via the Window menu item that is checked.
+fvm -x pause "$displayName"
+
+# Activate the VM window again (with the VM now paused)...
+fvm -x "$displayName"
+sleep 1 # sleep a little, just to be safe
+
+# ...and toggle it off again.
+fvm -t -x "$displayName" || die
+sleep 1 # sleep a little, just to be safe
+
+# Make sure the previously active app is active again.
+activeAppPath=$(osascript -e 'path to frontmost application as text')
+[[ "$activeAppPath" == "$prevActiveAppPath" ]] || die "Toggling in paused state did not return to the previously active application: expected: '$prevActiveAppPath'; actual: '$activeAppPath'"
+
+exit 0
