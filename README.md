@@ -1,5 +1,4 @@
-![project status](https://img.shields.io/badge/status-not_ready_for_release-red.svg)
-<!--[![npm version](https://img.shields.io/npm/v/fvm-cli.svg)](https://npmjs.com/package/fvm-cli) [![license](https://img.shields.io/npm/l/fvm-cli.svg)](https://github.com/mklement0/fvm-cli/blob/master/LICENSE.md)-->
+[![npm version](https://img.shields.io/npm/v/fvm-cli.svg)](https://npmjs.com/package/fvm-cli) [![license](https://img.shields.io/npm/l/fvm-cli.svg)](https://github.com/mklement0/fvm-cli/blob/master/LICENSE.md)
 
 # fvm &mdash; VM management CLI for VMware Fusion (macOS only)
 
@@ -24,14 +23,21 @@ AppleScript support was quietly removed from VMware Fusion v7.
 # Examples
 
 ```shell
+# Show VMware Fusion's Library window.
+fvm         # short for: fvm library
+
 # Activate (open existing window or start) the VM whose display name
 # contains the (unambiguous) substring "w10":
 fvm w10     # short for: fvm activate w10
 
-# Activate the VM whose display name contains the words "ubuntu" and "14":
+# Toggle activation of the VM whose display name contains the (unambiguous) 
+# substring "w10" (only useful when run via hotkey).
+fvm -t w10     # short for: fvm activate w10
+
+# Activate the VM whose display name contains the words "ubuntu" and "14".
 fvm 'ubuntu.*14'
 
-# Close the window of the VM whose display name is exactly "W7 (32-bit)"
+# Close the window of the VM whose display name is exactly "W7 (32-bit)".
 fvm -x close "W7 (32-bit)"
 
 # List all registered VMs by display name, guest OS, state, and VMX file path,
@@ -75,19 +81,19 @@ fvm -gu jdoe -gp test runProgramInGuest w10 -nowait -interactive 'C:\WINDOWS\sys
 
 <sup>Note: Even if you don't use Node.js, its package manager, `npm`, works across platforms and is easy to install; try [`curl -L https://git.io/n-install | bash`](https://github.com/mklement0/n-install)</sup>
 
-With [Node.js](http://nodejs.org/) or [io.js](https://iojs.org/) installed, install [the package](https://www.npmjs.com/package/nws-cli) as follows:
+With [Node.js](http://nodejs.org/) or [io.js](https://iojs.org/) installed, install [the package](https://www.npmjs.com/package/fvm-cli) as follows:
 
     [sudo] npm install fvm-cli -g
 
 **Note**:
 
 * Whether you need `sudo` depends on how you installed Node.js / io.js and whether you've [changed permissions later](https://docs.npmjs.com/getting-started/fixing-npm-permissions); if you get an `EACCES` error, try again with `sudo`.
-* The `-g` ensures [_global_ installation](https://docs.npmjs.com/getting-started/installing-npm-packages-globally) and is needed to put `nws` in your system's `$PATH`.
+* The `-g` ensures [_global_ installation](https://docs.npmjs.com/getting-started/installing-npm-packages-globally) and is needed to put `fvm` in your system's `$PATH`.
 
 ## Manual installation
 
 * Download [the CLI](https://raw.githubusercontent.com/mklement0/fvm-cli/stable/bin/fvm) as `fvm`.
-* Make it executable with `chmod +x nws`.
+* Make it executable with `chmod +x fvm`.
 * Move it or symlink it to a folder in your `$PATH`, such as `/usr/local/bin` (OSX) or `/usr/bin` (Linux).
 
 # Usage
@@ -127,7 +133,7 @@ Standard options: --help, --man, --version, --home
 
 ## License
 
-Copyright (c) 2015-2016 Michael Klement, released under the [MIT license](http://opensource.org/licenses/MIT).
+Copyright (c) 2016 Michael Klement, released under the [MIT license](http://opensource.org/licenses/MIT).
 
 ### Acknowledgements
 
@@ -151,5 +157,5 @@ This project gratefully depends on the following open-source components, accordi
 ## Changelog
 
 
-* **v0.1.0-0** (2015-06-26):
-    * Preparing for initial release.
+* **v0.1.0** (2016-12-18):
+  * Initial release.

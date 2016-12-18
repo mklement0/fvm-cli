@@ -185,9 +185,16 @@ the [MIT license](https://spdx.org/licenses/MIT).
 
 ## EXAMPLES
 
+    # Show VMware Fusion's Library window.
+    fvm       # short for: fvm library
+
     # Activate (open existing window or run) the VM whose display name
     # contains the substring "w10":
-    fvm w10
+    fvm w10   # short for: fvm activate 10
+
+    # Toggle activation of the VM whose display name contains the (unambiguous) 
+    # substring "w10" (only useful when run via hotkey).
+    fvm -t w10     # short for: fvm activate w10
 
     # Activate the VM whose display name contains the words "ubuntu" and "14":
     fvm 'ubuntu.*14'
@@ -218,6 +225,6 @@ the [MIT license](https://spdx.org/licenses/MIT).
     # Get a VM's (guest OS's) IP address.
     fvm getGuestIpAddress w10
 
-    # Run a program asynchronously and interactively in the guest OS. 
+    # Run a program in the guest OS asynchronously and interactively. 
     fvm -gu jdoe -gp test runProgramInGuest w10 -nowait -interactive 'C:\WINDOWS\system32\calc.exe'
 
