@@ -20,18 +20,19 @@
     -t ... toggle activation (hotkey-based invocations)
     -x ... display name is specified literally, in full
     -b ... bare, tab-separated output for machine parsing
-    -s ... sort by status: running/paused VMs first
+    -s ... include VM state and show open VMs first
     --help-vmrun ... shows vmrun's command-line help
 
 Standard options: `--help`, `--man`, `--version`, `--home`
 
 ## DESCRIPTION
 
-`fvm` (*F*usion *V*M *M*anager) is a covenience wrapper around the `vmrun`  
-CLI (https://www.vmware.com/support/pubs/fusion_pubs.html) that comes with  
-VMWare Fusion.
+`fvm` (*F*usion *V*M *M*anager) is a convenience wrapper around the `vmrun`  
+CLI (https://www.vmware.com/support/developer/vix-api/vix112_vmrun_command.pdf)  
+that comes with VMWare Fusion, with added functionality for managing VM  
+window states.
 
-Its major areas of functionality are:
+The major areas of functionality are:
 
 * VMs can be targeted by display name substrings (regular expressions)  
   instead of having to specify their VMX file path.
@@ -86,13 +87,17 @@ targeting a specific VM in the following ways:
 
   * `ls`  
   lists all registered VMs sorted case-insensitively by display name by  
-  default. If you add `-s`, currently running or paused VMs are shown first.  
+  default. If you add `-s`, VMs with open windows are shown first.  
   The default display is columnated, with a header, for human consumption.  
   To get header-less, tab-separated data for programmatic consumption instead,  
   use `-b`.  
-  The fields output for each VM are: display name, guest OS identifier, state,  
-  VMX file path. The state field contains "on", if a VM is running or paused,
-  and is blank (a single space when used with `-b`) otherwise.  
+  The fields output for each VM are:  
+  Without -s: display name, guest OS identifier, VMX file path.  
+  With -s:    display name, guest OS identifier, state, VMX file path. 
+  The state field contains:  
+    "on", if a VM is open in a window and running or paused  
+    "win", if it is open in a window and suspended or shut down  
+    a single space otherwise (not open in a window).  
   You may optionally specify a display-name regex to filter the list by.
 
   * `start`, `pause`, `unpause`, `suspend`, `reset`  
@@ -137,10 +142,13 @@ targeting a specific VM in the following ways:
     switches the `ls` command's output from the default, columated
     format to a header-less, tab-separated format, as described above.
 
-  * `-s`, `--by-status`  
-    makes the `ls` command list running or paused VMs first. Inside each group  
-    the VMs are sorted case-sensitively by display name.  
-    To see *only* running or paused VMs, you may also use `fvm list` to pass  
+  * `-s`, `--show-state`  
+    makes the `ls` command include power state information for each VM,  
+    with VMs that are open in a window listed first.  
+    Within each group, the VMs are sorted case-sensitively by display name.  
+    A "state" column is added to the output, whose values are described above.  
+    Note that this option significantly increases execution time.  
+    To see only running or paused VMs, you may use `fvm list` to pass  
     the `list` command through to `vmrun`, but note that they will be listed  
     by VMX file path only.
 
@@ -187,26 +195,29 @@ the [MIT license](https://spdx.org/licenses/MIT).
     # Close the window of the VM whose display name is exactly "W7 (32-bit)"
     fvm -x close "W7 (32-bit)"
 
-    # List all registered VMs by display name, guest OS, and VMX file path.
-    fvm ls
+    # List all registered VMs by display name, guest OS, state, and VMX file 
+    # path, with open VMs listed first.
+    fvm -s ls
 
-    # List VMs whose display names contain the word "ubuntu", with running  
-    # or paused ones printed first.
-    fvm -s ls 'ubuntu'
+    # List VMs whose display names contain the word "ubuntu".
+    fvm ls 'ubuntu'
 
     ## vmrun PASS-THROUGH EXAMPLES
     ## All examples below use "w10" as the display-name regex for identifying
     ## the target VM. 
   
+    # Suspend a VM.
+    fvm suspend w10
+
     # Check if a VM has the VMware Tools are installed.
     fvm checkToolsState w10
 
     # List a VM's snapshots.
     fvm listsnapshots w10
 
-    # Get the guest's IP address.
+    # Get a VM's (guest OS's) IP address.
     fvm getGuestIpAddress w10
 
-    # Runs a program asynchronously and interactively in the guest OS. 
+    # Run a program asynchronously and interactively in the guest OS. 
     fvm -gu jdoe -gp test runProgramInGuest w10 -nowait -interactive 'C:\WINDOWS\system32\calc.exe'
 

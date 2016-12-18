@@ -1118,11 +1118,12 @@ Standard options: `--help`, `--man`, `--version`, `--home`
 
 ## DESCRIPTION
 
-`fvm` (*F*usion *V*M *M*anager) is a covenience wrapper around the `vmrun`  
+`fvm` (*F*usion *V*M *M*anager) is a convenience wrapper around the `vmrun`  
 CLI (https://www.vmware.com/support/developer/vix-api/vix112_vmrun_command.pdf)  
-that comes with VMWare Fusion.
+that comes with VMWare Fusion, with added functionality for managing VM  
+window states.
 
-Its major areas of functionality are:
+The major areas of functionality are:
 
 * VMs can be targeted by display name substrings (regular expressions)  
   instead of having to specify their VMX file path.
@@ -1285,27 +1286,30 @@ the [MIT license](https://spdx.org/licenses/MIT).
     # Close the window of the VM whose display name is exactly "W7 (32-bit)"
     fvm -x close "W7 (32-bit)"
 
-    # List all registered VMs by display name, guest OS, and VMX file path.
-    fvm ls
+    # List all registered VMs by display name, guest OS, state, and VMX file 
+    # path, with open VMs listed first.
+    fvm -s ls
 
-    # List VMs whose display names contain the word "ubuntu", with VMs with 
-    # open windows printed first.
-    fvm -s ls 'ubuntu'
+    # List VMs whose display names contain the word "ubuntu".
+    fvm ls 'ubuntu'
 
     ## vmrun PASS-THROUGH EXAMPLES
     ## All examples below use "w10" as the display-name regex for identifying
     ## the target VM. 
   
+    # Suspend a VM.
+    fvm suspend w10
+
     # Check if a VM has the VMware Tools are installed.
     fvm checkToolsState w10
 
     # List a VM's snapshots.
     fvm listsnapshots w10
 
-    # Get the guest's IP address.
+    # Get a VM's (guest OS's) IP address.
     fvm getGuestIpAddress w10
 
-    # Runs a program asynchronously and interactively in the guest OS. 
+    # Run a program asynchronously and interactively in the guest OS. 
     fvm -gu jdoe -gp test runProgramInGuest w10 -nowait -interactive 'C:\WINDOWS\system32\calc.exe'
 
 EOF_MAN_PAGE
