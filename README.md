@@ -99,7 +99,7 @@ With [Node.js](http://nodejs.org/) or [io.js](https://iojs.org/) installed, inst
 # Usage
 
 Find concise usage information below; for complete documentation, read the [manual online](doc/fws.md) or,
-once installed, run `man fvn` (`fvm --man` if installed manually).
+once installed, run `man fvm` (`fvm --man` if installed manually).
 
 <!-- DO NOT EDIT THE FENCED CODE BLOCK and RETAIN THIS COMMENT: The fenced code block below is updated by `make update-readme/release` with CLI usage information. -->
 
