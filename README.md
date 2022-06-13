@@ -79,9 +79,9 @@ fvm -gu jdoe -gp test runProgramInGuest w10 -nowait -interactive 'C:\WINDOWS\sys
 
 ## Installation from the npm registry
 
-<sup>Note: Even if you don't use Node.js, its package manager, `npm`, works across platforms and is easy to install; try [`curl -L https://git.io/n-install | bash`](https://github.com/mklement0/n-install)</sup>
+<sup>Note: Even if you don't use Node.js, its package manager, `npm`, works across platforms and is easy to install; try [`curl -L https://bit.ly/n-install | bash`](https://github.com/mklement0/n-install)</sup>
 
-With [Node.js](http://nodejs.org/) or [io.js](https://iojs.org/) installed, install [the package](https://www.npmjs.com/package/fvm-cli) as follows:
+With [Node.js](http://nodejs.org/) installed, install [the package](https://www.npmjs.com/package/fvm-cli) as follows:
 
     [sudo] npm install fvm-cli -g
 
