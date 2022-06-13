@@ -31,11 +31,11 @@
   "author": "Michael Klement <mklement0@gmail.com> (http://same2u.net)",
   "license": "MIT",
   "devDependencies": {
-    "json": "^9.0.3",
+    "json": "^11.0.0",
     "marked-man": "^0.1.6",
-    "replace": "^0.3.0",
+    "replace": "^1.2.1",
     "semver": "^4.2.0",
-    "tap": "^0.6.0",
+    "tap": "^16.2.0",
     "urchin": "^0.0.5"
   },
   "net_same2u": {

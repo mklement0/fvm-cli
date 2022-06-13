@@ -19,6 +19,11 @@ g_testMode=0
 
 # The full path of the `vmrun` CLI that we're wrapping.
 g_vmrunExe='/Applications/VMware Fusion.app/Contents/Library/vmrun'
+# !! Add support for the ARM macOS preview version.
+# !! Note that `name of it` for the preview version (osascript -e 'tell application id "com.vmware.fusion" to name of it') 
+# !! reports "VMware Fusion Tech Preview", but the *actual* app name is "VMware Fusion" for the purposes of GUI scripting.
+# !! Hence, the app name is *hard-coded* below.
+[[ -f $g_vmrunExe ]] || g_vmrunExe='/Applications/VMware Fusion Tech Preview.app/Contents/Library/vmrun'
 # TEST-MODE SUPPORT: override with the mock version
 (( g_testMode )) && g_vmrunExe='/tmp/net.same2u.fvm-test/vmrun' 
 
@@ -184,7 +189,7 @@ getFusionFrontWindowNameIfFrontmost() {
   osascript -- - <<'EOF'
     tell application id "com.vmware.fusion"
       if not running or not frontmost then return
-      set appName to name of it
+      set appName to "VMware Fusion" # name of it
       tell application "System Events" to tell application process appName
         try
             # Try to reference the front window's name and fail quietly, if there's none.
@@ -241,7 +246,7 @@ showFusionLibraryWin() {
         delay 0.1
         activate
       end repeat
-      set appName to name of it
+      set appName to "VMware Fusion" # name of it
       # Activate the "Virtual Machine Library" window 
       # Note: Since Window > Virtual Machine Library is a *persistent* entry in the Window menu - irrespective of
       #       whether the library window is actually open or not, we do NOT need to worry about unhiding Fusion first.
@@ -272,7 +277,7 @@ activateFusionWindow() {
     on run(argv)
       tell application id "com.vmware.fusion"
         if not running then return false
-        return my activateWin(name of it, (item 1 of argv))
+        return my activateWin("VMware Fusion", (item 1 of argv)) # name of it
       end tell
     end run
 
@@ -341,7 +346,7 @@ getOpenVmDisplayNames() {
   osascript -- - <<'EOF'
     tell application id "com.vmware.fusion"
       if not running then return
-      set appName to name of it
+      set appName to "VMware Fusion" # name of it
       tell application "System Events" to tell application process appName
         # !! Unfortunately, we must ensure that Fusion is visible in order
         # !! for the Window menu to be populated with the open VM windows.
@@ -653,7 +658,7 @@ isFusionLibWinFrontmost() {
     tell application id "com.vmware.fusion"
       if it is not running then return false
       if it is not frontmost then return false
-      set appName to name of it
+      set appName to "VMware Fusion" # name of it
     end tell
     tell application "System Events" to tell application process appName to tell menu 1 of menu bar item -2 of menu bar 1
   		return missing value ≠ value of attribute "AXMenuItemMarkChar" of (first menu item whose value of attribute "AXMenuItemCmdChar" is "L" and value of attribute "AXMenuItemCmdModifiers" is 1)
@@ -675,7 +680,7 @@ activateNextFusionWindow() {
   local res=$(osascript -- - <<'EOF'
     tell application id "com.vmware.fusion"
       if it is not running then return false
-      set appName to name of it
+      set appName to "VMware Fusion" # name of it
     end tell
     tell application "System Events" to tell application process appName
       try
@@ -970,7 +975,8 @@ else
         # Blindly try to activate a Fusion window by that name
         # and exit, if that succeeds, meaning that the window exists and was activated.
         activateFusionWindow "$displayName" 2>/dev/null && exit
-        # Otherwise: start the VM with vmrun, which implicitly activates the window too.
+        # Otherwise: Start the VM with vmrun, which implicitly activates the window too.
+        #            Note: If the VM is already running (it shouldn't be), this will NOT activate the existing window.
         "$g_vmrunExe" start "$vmxFilePath"
         ec=$? # We pass whatever exit code vmrun reported through.
       fi      
